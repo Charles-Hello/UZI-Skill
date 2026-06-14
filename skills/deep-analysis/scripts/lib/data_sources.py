@@ -300,7 +300,19 @@ def fetch_basic(ti: TickerInfo) -> dict:
     """Returns a dict with: code, name, industry, price, change_pct, market_cap, pe_ttm, pb.
 
     TTL = 60s (real-time quote). Use STOCK_NO_CACHE=1 to bypass entirely.
+    Priority: THS local+API (fastest) → akshare → HTTP fallbacks.
     """
+    # TIER -1: THS reverse-engineered data (local files + HTTP API, zero third-party deps)
+    try:
+        from .ths_provider import ths_fetch_basic, ths_available
+        if ths_available():
+            ths_data = ths_fetch_basic(ti)
+            if ths_data and ths_data.get("price"):
+                ths_data.setdefault("source", "ths")
+                return ths_data
+    except Exception:
+        pass
+
     if ti.market == "A":
         return cached(ti.full, f"basic__{ti.code}", lambda: _fetch_basic_a(ti), ttl=TTL_REALTIME)
     if ti.market == "H":
@@ -853,7 +865,19 @@ def _fetch_basic_us(ti: TickerInfo) -> dict:
 # 1. K-line (OHLCV)
 # ─────────────────────────────────────────────────────────────
 def fetch_kline(ti: TickerInfo, period: str = "daily", start: str = "20240101", adjust: str = "qfq") -> list[dict]:
-    """K-line OHLCV. TTL = 5min during day, naturally serves stale-OK after close."""
+    """K-line OHLCV. TTL = 5min during day, naturally serves stale-OK after close.
+    Priority: THS local binary (2ms) → akshare → HTTP fallbacks.
+    """
+    # TIER -1: THS local binary K-line (near-instant, zero network)
+    try:
+        from .ths_provider import ths_fetch_kline, ths_available
+        if ths_available():
+            ths_kline = ths_fetch_kline(ti, period, start, adjust)
+            if ths_kline and len(ths_kline) > 10:
+                return ths_kline
+    except Exception:
+        pass
+
     key = f"kline__{ti.code}__{period}__{start}__{adjust}"
     return cached(ti.full, key, lambda: _fetch_kline_impl(ti, period, start, adjust), ttl=TTL_INTRADAY)
 
@@ -1190,7 +1214,19 @@ def _kline_us_chain(ti: TickerInfo) -> list[dict]:
 # 2. Financials (3 statements)
 # ─────────────────────────────────────────────────────────────
 def fetch_financials(ti: TickerInfo) -> dict:
-    """Quarterly financials. TTL = 24h (季报频率)."""
+    """Quarterly financials. TTL = 24h (季报频率).
+    Priority: THS FinancialClient (Eastmoney datacenter) → akshare → yfinance.
+    """
+    # TIER -1: THS financials (Eastmoney datacenter, richer than akshare)
+    try:
+        from .ths_provider import ths_fetch_financials, ths_available
+        if ths_available():
+            ths_data = ths_fetch_financials(ti)
+            if ths_data and (ths_data.get("indicator") or ths_data.get("abstract")):
+                return ths_data
+    except Exception:
+        pass
+
     return cached(ti.full, f"fin__{ti.code}", lambda: _fetch_financials_impl(ti), ttl=TTL_QUARTERLY)
 
 
@@ -1275,7 +1311,19 @@ def _fetch_lhb_impl(ti: TickerInfo, days: int) -> list[dict]:
 # 4. News / Telegraph (财联社)
 # ─────────────────────────────────────────────────────────────
 def fetch_news(ti: TickerInfo, limit: int = 30) -> list[dict]:
-    """News TTL = 1h (hot news shouldn't be stale)."""
+    """News TTL = 1h (hot news shouldn't be stale).
+    Priority: THS stockpage/basicapi news → akshare stock_news_em.
+    """
+    # TIER -1: THS news (stockpage + basicapi, works when akshare fails)
+    try:
+        from .ths_provider import ths_fetch_news, ths_available
+        if ths_available():
+            ths_news = ths_fetch_news(ti, limit=limit)
+            if ths_news and len(ths_news) >= 3:
+                return ths_news
+    except Exception:
+        pass
+
     if ak is None:
         return []
     key = f"news__{ti.code}__{limit}"
@@ -1296,7 +1344,19 @@ def _fetch_news_impl(ti: TickerInfo, limit: int) -> list[dict]:
 # 5. Sentiment / hot rank
 # ─────────────────────────────────────────────────────────────
 def fetch_hot_rank(ti: TickerInfo) -> dict:
-    """Sentiment hot rank. TTL = 5min (changes intraday)."""
+    """Sentiment hot rank. TTL = 5min (changes intraday).
+    Priority: THS popularity API → akshare hot_rank.
+    """
+    # TIER -1: THS popularity rank (real rank number, better than heuristic)
+    try:
+        from .ths_provider import ths_fetch_hot_rank, ths_available
+        if ths_available() and ti.market == "A":
+            ths_hot = ths_fetch_hot_rank(ti)
+            if ths_hot and ths_hot.get("rank"):
+                return ths_hot
+    except Exception:
+        pass
+
     if ak is None or ti.market != "A":
         return {}
     key = f"hot__{ti.code}"
@@ -1315,7 +1375,19 @@ def _fetch_hot_impl(ti: TickerInfo) -> dict:
 # 6. North-bound capital (A only)
 # ─────────────────────────────────────────────────────────────
 def fetch_northbound(ti: TickerInfo) -> dict:
-    """North-bound capital. TTL = 2h (daily aggregate)."""
+    """North-bound capital / capital flow. TTL = 2h (daily aggregate).
+    Priority: THS capital flow (intraday + daily) → akshare northbound.
+    """
+    # TIER -1: THS capital flow (daily flow_history + intraday summary + sector)
+    try:
+        from .ths_provider import ths_fetch_capital_flow, ths_available
+        if ths_available() and ti.market == "A":
+            ths_flow = ths_fetch_capital_flow(ti)
+            if ths_flow and ths_flow.get("flow_history"):
+                return ths_flow
+    except Exception:
+        pass
+
     if ak is None or ti.market != "A":
         return {}
     key = f"hsgt__{ti.code}"
@@ -1334,7 +1406,19 @@ def _fetch_north_impl(ti: TickerInfo) -> dict:
 # 7. Research reports
 # ─────────────────────────────────────────────────────────────
 def fetch_research_reports(ti: TickerInfo) -> list[dict]:
-    """Research reports. TTL = 24h (mostly stable)."""
+    """Research reports. TTL = 24h (mostly stable).
+    Priority: THS stockpage research reports → akshare stock_research_report_em.
+    """
+    # TIER -1: THS research reports (stockpage API, richer metadata)
+    try:
+        from .ths_provider import ths_fetch_research, ths_available
+        if ths_available() and ti.market == "A":
+            ths_reports = ths_fetch_research(ti, limit=20)
+            if ths_reports and len(ths_reports) >= 2:
+                return ths_reports
+    except Exception:
+        pass
+
     if ak is None or ti.market != "A":
         return []
     key = f"research__{ti.code}"
