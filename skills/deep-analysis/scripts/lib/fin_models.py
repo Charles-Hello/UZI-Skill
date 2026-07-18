@@ -258,8 +258,34 @@ def build_comps_table(target: dict, peers: list[dict]) -> dict:
     Each dict must carry: name, ticker, pe, pb, ps, ev_ebitda (optional),
     ev_sales (optional), revenue_yi, net_margin, roe, market_cap_yi.
     """
-    if not peers:
-        return {"error": "no peers provided", "target": target}
+    def _same_company(peer: dict) -> bool:
+        if peer.get("is_self"):
+            return True
+        target_ticker = str(target.get("ticker") or target.get("code") or "").strip()
+        peer_ticker = str(peer.get("ticker") or peer.get("code") or "").strip()
+        if target_ticker and peer_ticker and target_ticker == peer_ticker:
+            return True
+        target_name = str(target.get("name") or "").strip()
+        peer_name = str(peer.get("name") or "").strip()
+        return bool(target_name and peer_name and target_name == peer_name)
+
+    valid_peers = [p for p in peers if isinstance(p, dict) and not _same_company(p)]
+    if len(valid_peers) < 2:
+        return {
+            "method": "Comparable Company Analysis (peer multiples)",
+            "target": target,
+            "peers": valid_peers,
+            "peer_count": len(valid_peers),
+            "peer_stats": {},
+            "target_percentile": {},
+            "implied_price": {},
+            "current_price": _num(target.get("price")),
+            "valuation_verdict": "⚪ 同行样本不足 · 无法对标",
+            "methodology_log": [
+                f"Step 1 · 有效同行池 n={len(valid_peers)}（已剔除目标公司自身）",
+                "Step 2 · 有效同行少于 2 家，跳过分位数与估值结论",
+            ],
+        }
 
     metrics = ["pe", "pb", "ps", "ev_ebitda", "ev_sales",
                "roe", "net_margin", "revenue_growth"]
@@ -268,7 +294,7 @@ def build_comps_table(target: dict, peers: list[dict]) -> dict:
     import statistics
     stats: dict[str, dict] = {}
     for m in metrics:
-        values = [_num(p.get(m)) for p in peers if _num(p.get(m)) > 0]
+        values = [_num(p.get(m)) for p in valid_peers if _num(p.get(m)) > 0]
         if not values:
             continue
         stats[m] = {
@@ -287,7 +313,7 @@ def build_comps_table(target: dict, peers: list[dict]) -> dict:
         tv = _num(target.get(m))
         if tv <= 0:
             continue
-        values = sorted([_num(p.get(m)) for p in peers if _num(p.get(m)) > 0])
+        values = sorted([_num(p.get(m)) for p in valid_peers if _num(p.get(m)) > 0])
         rank = sum(1 for v in values if v < tv)
         target_pct[m] = round(rank / len(values) * 100, 0) if values else 50
 
@@ -313,14 +339,15 @@ def build_comps_table(target: dict, peers: list[dict]) -> dict:
     return {
         "method": "Comparable Company Analysis (peer multiples)",
         "target": target,
-        "peers": peers,
+        "peers": valid_peers,
+        "peer_count": len(valid_peers),
         "peer_stats": stats,
         "target_percentile": target_pct,
         "implied_price": implied,
         "current_price": cur_px,
         "valuation_verdict": val_verdict,
         "methodology_log": [
-            f"Step 1 · 同行池 n={len(peers)}",
+            f"Step 1 · 有效同行池 n={len(valid_peers)}（已剔除目标公司自身）",
             f"Step 2 · PE 中位数 {stats.get('pe', {}).get('median', '-')}，目标 PE {target.get('pe', '-')}",
             f"Step 3 · 目标 PE 分位 {pe_pct}%",
             f"Step 4 · 隐含价 (中位 PE × EPS) = ¥{implied.get('via_median_pe', '-')}",

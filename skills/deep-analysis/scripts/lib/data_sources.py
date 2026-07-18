@@ -243,6 +243,50 @@ def _fetch_a_share_basic_from_baostock(ti: TickerInfo, *, include_quote: bool = 
     return source
 
 
+def _parse_em_direct_payload(data: dict) -> dict:
+    """Normalize EastMoney push2 single-stock payload.
+
+    push2 fields use mixed scales:
+    - f43/f60: price * 100
+    - f170: change pct * 100
+    - f47: volume in lots, never a fallback for change pct
+    - f116/f117: market cap / circulating cap in yuan
+    """
+    if not data:
+        return {}
+
+    def _scaled(field: str, scale: float = 100.0):
+        raw = data.get(field)
+        return raw / scale if raw not in (None, "", "-") else None
+
+    out: dict[str, Any] = {}
+    price = _scaled("f43")
+    prev_close = _scaled("f60")
+    change_pct = _scaled("f170")
+    if change_pct is None and price and prev_close:
+        change_pct = round((price - prev_close) / prev_close * 100, 2)
+
+    if price:
+        out["price"] = price
+    if prev_close:
+        out["prev_close"] = prev_close
+    if change_pct is not None:
+        out["change_pct"] = round(change_pct, 2)
+    if data.get("f47") not in (None, "", "-"):
+        out["volume"] = data.get("f47")
+    if data.get("f162"):
+        out["pe_ttm"] = data["f162"] / 100
+    if data.get("f167"):
+        out["pb"] = data["f167"] / 100
+    if data.get("f116"):
+        out["market_cap"] = f"{round(data['f116'] / 1e8, 1)}亿"
+        out["market_cap_raw"] = data["f116"]
+    if data.get("f117"):
+        out["circulating_cap"] = f"{round(data['f117'] / 1e8, 1)}亿"
+        out["circulating_cap_raw"] = data["f117"]
+    return out
+
+
 def _ensure_a_share_basic_fields(out: dict, ti: TickerInfo) -> dict:
     """Field-level fallback gate for A-share basic data.
 
@@ -475,22 +519,14 @@ def _fetch_basic_a(ti: TickerInfo) -> dict:
             url = "https://push2.eastmoney.com/api/qt/stock/get"
             params = {
                 "secid": secid,
-                "fields": "f43,f44,f45,f46,f47,f48,f50,f57,f58,f116,f117,f162,f164",
+                "fields": "f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f116,f117,f162,f164,f167,f170",
                 "ut": "fa5fd1943c7b386f172d6893dbfba10b",
             }
             r = requests.get(url, params=params, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
             data = (r.json() or {}).get("data") or {}
             if data:
-                scale = 100.0
-                price = (data.get("f43") or 0) / scale
-                chg = (data.get("f170") or data.get("f47") or 0) / scale if data.get("f47") else None
-                out.update({
-                    "price": price if price else out.get("price"),
-                    "change_pct": chg,
-                    "pe_ttm": (data.get("f162") or 0) / 100 if data.get("f162") else out.get("pe_ttm"),
-                    "pb": (data.get("f167") or 0) / 100 if data.get("f167") else out.get("pb"),
-                    "market_cap": data.get("f116") or out.get("market_cap"),
-                })
+                parsed = _parse_em_direct_payload(data)
+                out.update({k: v for k, v in parsed.items() if v not in (None, "", "-")})
                 out["_fallback_snap"] = "em-direct"
         except Exception as e:
             out["_em_direct_err"] = str(e)
@@ -1209,6 +1245,7 @@ def _fetch_financials_impl(ti: TickerInfo) -> dict:
         t = yf.Ticker(ti.code)
         return {
             "income": t.financials.to_dict() if t.financials is not None else {},
+            "quarterly_income": t.quarterly_financials.to_dict() if t.quarterly_financials is not None else {},
             "balance": t.balance_sheet.to_dict() if t.balance_sheet is not None else {},
             "cashflow": t.cashflow.to_dict() if t.cashflow is not None else {},
         }

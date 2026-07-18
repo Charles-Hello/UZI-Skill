@@ -1,9 +1,48 @@
 # BUGS-LOG · 防回归记录
 
 每个 bug 修完都登记到这里。**未来改这些代码区域时，必须回看本文件确保不引入回归。**
-对应单元测试在 `skills/deep-analysis/scripts/tests/test_no_regressions.py` + `tests/test_v2_10_4_fixes.py` + `tests/test_v2_11_scoring_calibration.py` + `tests/test_v2_12_1_data_fixes.py` + `tests/test_v2_13_playwright_strategy.py` + `tests/test_v3_9_2_flow_bugfixes.py`。
+对应单元测试在 `skills/deep-analysis/scripts/tests/test_no_regressions.py` + `tests/test_v2_10_4_fixes.py` + `tests/test_v2_11_scoring_calibration.py` + `tests/test_v2_12_1_data_fixes.py` + `tests/test_v2_13_playwright_strategy.py` + `tests/test_v3_9_2_flow_bugfixes.py` + `tests/test_issue87_em_direct_and_comps.py` + `tests/test_issue90_us_financials_ttm.py`。
 
 **登记规范**：每条必含 症状 / 位置 / 根因 / 影响 / 修法 / 验证 / 回归测试 / "未来改该区域注意事项"
+
+---
+
+## Unreleased (2026-07-18 · 数据完整性 hotfix · issue #87/#90)
+
+### BUG · 东财直连字段/单位误读、Comps 自引用、美股财报只看年报
+
+- **症状**：
+  1. [#87](https://github.com/wbh604/UZI-Skill/issues/87) · A 股基础数据走 EastMoney push2 直连 fallback 时，把 `f47` 成交量错误当作 `change_pct` 兜底，导致涨跌幅异常；同时 `f116` 市值原始单位是元，下游按“亿”读会把 DCF/市场份额等派生指标放大 1e8 倍。
+  2. [#87](https://github.com/wbh604/UZI-Skill/issues/87) · Comps 同行估值在只有目标公司自身样本时仍继续计算分位与估值结论，报告可能出现“自己和自己对标”的假结论。
+  3. [#90](https://github.com/wbh604/UZI-Skill/issues/90) · 美股财务数据只读取 `yfinance.Ticker.financials` 年报，未合并更新的 quarterly financials，财报季后会继续展示旧年报口径，无法暴露 TTM 最新收入/净利。
+- **位置**：
+  - `lib/data_sources.py::_fetch_basic_a` / `_fetch_financials_impl`
+  - `lib/stock_features.py::extract_features`
+  - `lib/fin_models.py::build_comps_table`
+  - `fetch_financials.py::_fetch_us`
+- **根因**：
+  - EastMoney push2 字段 scale 混杂：`f43/f60` 是 price * 100，`f170` 是涨跌幅 * 100，`f47` 是成交量，`f116/f117` 是元；旧代码没有集中解析契约。
+  - Comps 模型只检查 `peers` 是否为空，没有剔除 `is_self` / 同 ticker / 同 name，也没有最低有效同行数 gate。
+  - 美股路径把年报列直接作为最新历史序列，没有读取 `quarterly_financials` 做最近 4 季 TTM，也没有 `financial_basis` / `financial_period` 告诉报告当前口径。
+- **影响**：
+  - A 股 fallback 下涨跌幅、市值、市占率、DCF per-share 和估值结论可能严重失真。
+  - 同行样本不足时仍给出估值判断，用户会把无样本报告误读成有效 peer comp。
+  - 美股在最新季报后仍显示旧年报趋势，尤其对周期股/半导体/高波动成长股会低估或高估盈利拐点。
+- **修法**：
+  1. 新增 `_parse_em_direct_payload` 集中归一化 push2 字段：只用 `f170` 或 `price/prev_close` 计算 `change_pct`，`f47` 只保留为 `volume`，`f116/f117` 转成 `xx亿` 并保留 raw。
+  2. `stock_features._market_cap_to_yi` 识别原始元单位并转成“亿”，市值、市占率走同一转换函数。
+  3. `build_comps_table` 剔除目标公司自身样本；有效同行少于 2 家时直接返回“同行样本不足 · 无法对标”，不输出分位和隐含价。
+  4. `_fetch_us` 读取 quarterly financials 最近 4 季 TTM；季度期末晚于年报时追加 `revenue_ttm` / `net_profit_ttm`，写 `financial_basis=TTM` 和 `financial_period`；最新口径超过 180 天时写 staleness warning。
+  5. `_fetch_financials_impl` 美股原始源暴露 `quarterly_income`，让数据排查能看到季度输入。
+- **验证**：
+  - `tests/test_issue87_em_direct_and_comps.py` 覆盖东财字段不把成交量当涨跌幅、原始元市值转“亿”、self-only Comps 被拒绝。
+  - `tests/test_issue90_us_financials_ttm.py` 覆盖 quarterly TTM 追加、旧财报时效 warning、raw data source 暴露 `quarterly_income`。
+  - 全量 `pytest tests -q`：663 passed。
+- **未来改该区域注意事项**：
+  - 新增东财 push2 字段时必须先写字段 scale 注释和解析测试，不要在 fetcher 内临时 `(field or other_field) / 100`。
+  - 下游模型的市值统一使用“亿”口径，raw 元只能作为溯源字段存在。
+  - Comps 估值必须有真实 peer universe；少于 2 家同行只能展示数据缺口，不能生成估值结论。
+  - 美股报告展示历史财务时必须同时写 `financial_basis` 和 `financial_period`，避免用户不知道当前是 annual 还是 TTM。
 
 ---
 

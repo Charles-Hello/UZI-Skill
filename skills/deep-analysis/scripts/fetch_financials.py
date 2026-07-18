@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+from datetime import datetime
 
 import akshare as ak  # type: ignore
 from lib import data_sources as ds
@@ -377,6 +378,70 @@ def _fetch_hk(ti) -> dict:
     return out
 
 
+def _period_date(col) -> tuple[datetime | None, str]:
+    label = str(col)[:10]
+    try:
+        return datetime.fromisoformat(label), label
+    except ValueError:
+        return None, label
+
+
+def _financial_row(df, candidates: list[str]) -> str | None:
+    if df is None or df.empty:
+        return None
+    return next((r for r in candidates if r in df.index), None)
+
+
+def _annual_history(df, candidates: list[str]) -> tuple[list[float], list[str], datetime | None, str | None]:
+    row = _financial_row(df, candidates)
+    if not row:
+        return [], [], None, None
+    points = []
+    for col in df.columns:
+        dt, label = _period_date(col)
+        raw = df.loc[row, col]
+        val = _to_float(raw)
+        if val:
+            points.append((dt or datetime.min, label, round(val / 1e8, 2)))
+    points.sort(key=lambda p: p[0])
+    if not points:
+        return [], [], None, None
+    values = [p[2] for p in points]
+    years = [p[1][:4] for p in points]
+    latest_dt = points[-1][0] if points[-1][0] != datetime.min else None
+    latest_label = points[-1][1]
+    return values, years, latest_dt, latest_label
+
+
+def _quarterly_ttm(df, candidates: list[str]) -> tuple[float | None, datetime | None, str | None]:
+    row = _financial_row(df, candidates)
+    if not row:
+        return None, None, None
+    points = []
+    for col in df.columns:
+        dt, label = _period_date(col)
+        raw = df.loc[row, col]
+        val = _to_float(raw)
+        if dt and val:
+            points.append((dt, label, val))
+    points.sort(key=lambda p: p[0], reverse=True)
+    if len(points) < 4:
+        return None, None, None
+    latest_four = points[:4]
+    return round(sum(p[2] for p in latest_four) / 1e8, 2), latest_four[0][0], latest_four[0][1]
+
+
+def _apply_financial_staleness(out: dict, latest_dt: datetime | None) -> None:
+    if latest_dt is None:
+        return
+    days = (datetime.now() - latest_dt).days
+    if days > 180:
+        out["financial_staleness_days"] = days
+        out["financial_staleness_warning"] = (
+            f"stale financials: latest period {out.get('financial_period')} is {days} days old"
+        )
+
+
 def _fetch_us(ti) -> dict:
     try:
         import yfinance as yf
@@ -384,19 +449,47 @@ def _fetch_us(ti) -> dict:
         return {}
     try:
         t = yf.Ticker(ti.code)
-        fin = t.financials  # 最近 4 年
+        fin = t.financials  # annual statements
+        qfin = getattr(t, "quarterly_financials", None)
         bs = t.balance_sheet
         cf = t.cashflow
         info = t.info or {}
         out: dict = {}
         if fin is not None and not fin.empty:
-            rev_row = next((r for r in ["Total Revenue", "TotalRevenue"] if r in fin.index), None)
-            np_row = next((r for r in ["Net Income", "NetIncome", "Net Income Common Stockholders"] if r in fin.index), None)
-            if rev_row:
-                out["revenue_history"] = [round(float(v) / 1e8, 2) for v in fin.loc[rev_row].tolist()[::-1]]
-            if np_row:
-                out["net_profit_history"] = [round(float(v) / 1e8, 2) for v in fin.loc[np_row].tolist()[::-1]]
-            out["financial_years"] = [str(c)[:4] for c in fin.columns[::-1]]
+            rev_hist, years, latest_dt, latest_label = _annual_history(fin, ["Total Revenue", "TotalRevenue"])
+            np_hist, np_years, np_latest_dt, np_latest_label = _annual_history(
+                fin, ["Net Income", "NetIncome", "Net Income Common Stockholders"]
+            )
+            if rev_hist:
+                out["revenue_history"] = rev_hist
+            if np_hist:
+                out["net_profit_history"] = np_hist
+            out["financial_years"] = years or np_years
+            latest_dt = max([d for d in (latest_dt, np_latest_dt) if d], default=None)
+            latest_label = latest_label or np_latest_label
+            if latest_label:
+                out["financial_period"] = latest_label
+                out["financial_basis"] = "annual"
+
+            rev_ttm, rev_q_dt, rev_q_label = _quarterly_ttm(qfin, ["Total Revenue", "TotalRevenue"])
+            np_ttm, np_q_dt, np_q_label = _quarterly_ttm(
+                qfin, ["Net Income", "NetIncome", "Net Income Common Stockholders"]
+            )
+            q_dt = max([d for d in (rev_q_dt, np_q_dt) if d], default=None)
+            q_label = rev_q_label or np_q_label
+            if q_dt and (latest_dt is None or q_dt > latest_dt) and (rev_ttm is not None or np_ttm is not None):
+                if rev_ttm is not None:
+                    out.setdefault("revenue_history", []).append(rev_ttm)
+                    out["revenue_ttm"] = rev_ttm
+                if np_ttm is not None:
+                    out.setdefault("net_profit_history", []).append(np_ttm)
+                    out["net_profit_ttm"] = np_ttm
+                out.setdefault("financial_years", []).append(f"TTM {q_label}")
+                out["financial_period"] = q_label
+                out["financial_basis"] = "TTM"
+                latest_dt = q_dt
+
+            _apply_financial_staleness(out, latest_dt)
         out["roe"] = f"{info.get('returnOnEquity', 0) * 100:.1f}%" if info.get("returnOnEquity") else "—"
         out["net_margin"] = f"{info.get('profitMargins', 0) * 100:.1f}%" if info.get("profitMargins") else "—"
         return out

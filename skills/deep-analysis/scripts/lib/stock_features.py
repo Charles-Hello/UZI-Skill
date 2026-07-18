@@ -54,6 +54,16 @@ def _min(values: list, default: float = 0.0) -> float:
     return min(vals) if vals else default
 
 
+def _market_cap_to_yi(v, default=0.0) -> float:
+    """Normalize market cap to 亿.
+
+    Fetchers may emit "4572.2亿" or raw yuan like 457223467965.5. Downstream
+    models expect 亿; treating yuan as 亿 collapses per-share DCF to near zero.
+    """
+    n = _f(v, default)
+    return n / 1e8 if n > 1_000_000 else n
+
+
 def extract_features(raw: dict, dims: dict) -> dict:
     """Extract ~60 features for criteria evaluation.
 
@@ -93,8 +103,8 @@ def extract_features(raw: dict, dims: dict) -> dict:
     f["industry"] = basic.get("industry") or "—"
     f["price"] = _f(basic.get("price"))
     f["change_pct"] = _f(basic.get("change_pct"))
-    f["market_cap_yi"] = _f(str(basic.get("market_cap", "0")).replace("亿", ""))
-    f["circulating_cap_yi"] = _f(str(basic.get("circulating_cap", "0")).replace("亿", ""))
+    f["market_cap_yi"] = _market_cap_to_yi(basic.get("market_cap_yi") or basic.get("market_cap"))
+    f["circulating_cap_yi"] = _market_cap_to_yi(basic.get("circulating_cap_yi") or basic.get("circulating_cap"))
     f["listed_date"] = str(basic.get("listed_date", ""))[:10]
     f["chairman"] = basic.get("chairman") or "—"
     f["actual_controller"] = basic.get("actual_controller") or "—"
@@ -376,7 +386,7 @@ def extract_features(raw: dict, dims: dict) -> dict:
 
     # market_share: 真实 = 公司市值 / 行业总市值 × 100
     # 数据源：basic.market_cap (亿) + industry.cninfo_metrics.total_mcap_yi (亿)
-    _cmcap_yi = _f(basic.get("market_cap_yi")) or _f(basic.get("market_cap"))
+    _cmcap_yi = _market_cap_to_yi(basic.get("market_cap_yi") or basic.get("market_cap"))
     _imcap_yi = _f((industry.get("cninfo_metrics") or {}).get("total_mcap_yi"))
     if _cmcap_yi > 0 and _imcap_yi > 0:
         f["market_share"] = round(_cmcap_yi / _imcap_yi * 100, 2)
