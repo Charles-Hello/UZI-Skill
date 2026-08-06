@@ -448,7 +448,8 @@ def _fetch_us(ti) -> dict:
     except ImportError:
         return {}
     try:
-        t = yf.Ticker(ti.code)
+        from lib.global_peers import to_yahoo_symbol
+        t = yf.Ticker(to_yahoo_symbol(ti))
         fin = t.financials  # annual statements
         qfin = getattr(t, "quarterly_financials", None)
         bs = t.balance_sheet
@@ -502,7 +503,7 @@ def main(ticker: str) -> dict:
     try:
         if ti.market == "A":
             data = _fetch_a_share(ti)
-        elif ti.market == "U":
+        elif ti.market not in ("A", "H"):
             data = _fetch_us(ti)
         elif ti.market == "H":
             data = _fetch_hk(ti)
