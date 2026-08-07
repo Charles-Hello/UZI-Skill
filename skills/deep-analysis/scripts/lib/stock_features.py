@@ -39,7 +39,9 @@ def _pct_change(values: list, n: int = 1) -> float:
 
 
 def _avg(values: list, default: float = 0.0) -> float:
-    vals = [_f(v) for v in values if _f(v) > 0]
+    # v3.9.4 · 与 _min 对齐：保留 0 值（!= 0），此前只对正值取平均会把亏损年份剔除，
+    # 让 ROE 均值虚高（[-3,-5,15,18,20] 真实均值 9.0 被算成 17.7）
+    vals = [_f(v) for v in values if _f(v) != 0]
     return sum(vals) / len(vals) if vals else default
 
 
