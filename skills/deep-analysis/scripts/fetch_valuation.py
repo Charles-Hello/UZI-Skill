@@ -199,14 +199,18 @@ def main(ticker: str) -> dict:
                 mcap_raw = basic.get("market_cap_raw") or 0
                 if current_price and mcap_raw:
                     total_shares = mcap_raw / current_price
-            total_shares = total_shares or 1e9
-            dcf_sensitivity = dcf_sensitivity_matrix(
-                fcf_latest=net_profit_yuan * 0.8,
-                waccs=[8, 9, 10, 11, 12],
-                growths=[6, 8, 10, 12],
-                current_price=current_price,
-                shares_out=total_shares,
-            )
+            # v3.9.4 · 不再硬编码 1e9 股本 —— 推导失败时标记数据不足，
+            # 否则每股内在价值会基于"10 亿股"算错（对市值偏离 10 亿的公司尤其荒谬）
+            if total_shares:
+                dcf_sensitivity = dcf_sensitivity_matrix(
+                    fcf_latest=net_profit_yuan * 0.8,
+                    waccs=[8, 9, 10, 11, 12],
+                    growths=[6, 8, 10, 12],
+                    current_price=current_price,
+                    shares_out=total_shares,
+                )
+            else:
+                dcf_sensitivity = {"_note": "股本数据缺失 · 无法计算每股敏感性", "values": []}
     except Exception as e:
         dcf_result = {"error": str(e)[:80]}
 
