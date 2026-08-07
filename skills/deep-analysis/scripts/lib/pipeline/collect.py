@@ -129,6 +129,11 @@ def collect(ticker: Any, raw_previous: dict | None = None, max_workers: int = 6)
     print(f"  [pipeline] wave 3 · {len(DEPENDENT_DIMS)} dependent fetcher")
     # 构造 raw-shaped dict 给 args_fn
     raw_for_deps = {"0_basic": out["0_basic"]}
+    # v3.9.4 · 9_futures 依赖 8_materials 的 materials_detail（识别原材料期货品种）· 一并传入
+    if "8_materials" in out:
+        raw_for_deps["8_materials"] = out["8_materials"]
+    if "1_financials" in out:
+        raw_for_deps["1_financials"] = out["1_financials"]
     for dim_key in sorted(DEPENDENT_DIMS):
         cached = raw_previous.get("dimensions", {}).get(dim_key)
         if cached and _is_resume_valid(cached):

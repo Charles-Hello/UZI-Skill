@@ -797,8 +797,9 @@ def _autofill_qualitative_via_mx(raw: dict, ticker: str) -> None:
 
     # 6 个定性维度的"空判定" + MX query 模板（v2.6.1 加严：默认值也算空）
     targets = [
+        # v3.9.4 · 3_macro autofill 聚焦宏观（利率/汇率/大宗）· 不带行业名 —— 此前带行业名会把行业展望误填成宏观利率
         ("3_macro",     lambda d: all(_is_default_or_empty(d.get(k)) for k in ("rate_cycle","fx_trend","geo_risk","commodity")),
-                        lambda: f"{industry} 2026 宏观环境 利率周期 汇率 大宗商品 行业影响"),
+                        lambda: f"2026 中国 利率 货币政策 降息 汇率 大宗商品 宏观环境"),
         ("7_industry",  lambda d: _is_default_or_empty(d.get("growth")) and not (d.get("cninfo_metrics") or {}).get("industry_pe_weighted"),
                         lambda: f"{industry} 2026 行业增速 TAM 市场规模 渗透率"),
         ("8_materials", lambda d: _is_default_or_empty(d.get("core_material")),

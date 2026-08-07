@@ -175,8 +175,9 @@ FETCHER_REGISTRY: dict[str, type] = {
         legacy_module="fetch_futures",
         required=[],
         optional=["linked_contract", "price_trend", "inventory"],
-        args_fn=lambda t, r: (r.get("0_basic", {}).get("data", {}).get("industry", "") or "综合",),
-        depends_on=["0_basic"],
+        args_fn=lambda t, r: (r.get("0_basic", {}).get("data", {}).get("industry", "") or "综合",
+                              (r.get("8_materials", {}).get("data", {}).get("materials_detail") or None),),
+        depends_on=["0_basic", "8_materials"],
     ),
 
     # 10_valuation · 估值
