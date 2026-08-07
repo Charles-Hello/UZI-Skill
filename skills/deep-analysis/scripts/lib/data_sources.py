@@ -625,10 +625,12 @@ def _fetch_basic_a(ti: TickerInfo) -> dict:
         try:
             df_pe = ak.stock_zh_valuation_baidu(symbol=ti.code, indicator="市盈率(TTM)", period="近一年")
             if df_pe is not None and not df_pe.empty and "value" in df_pe.columns:
-                # Take the latest non-null value
+                # 取最新一个非空值（含负值）· 不能跳负取正 —— 亏损股会被显示成历史正 PE，
+                # 是最危险的估值误导（负 PE 看起来"很便宜"）
                 for v in reversed(df_pe["value"].tolist()):
-                    if v and float(v) > 0:
+                    if v is not None and str(v).strip() not in ("", "nan", "--"):
                         out["pe_ttm"] = round(float(v), 3)
+                        out["_baidu_pe_fallback"] = "历史序列最新值 · 非实时 TTM"
                         break
         except Exception as e:
             out["_baidu_pe_err"] = str(e)[:80]
