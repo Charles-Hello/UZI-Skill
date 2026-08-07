@@ -931,6 +931,24 @@ def generate_synthesis(raw: dict, dims_scored: dict, panel: dict, agent_analysis
     from compute_friendly import compute_scenarios, compute_exit_triggers
     ag = agent_analysis or {}
 
+    # v3.9.4 · per_investor_override 合并 —— 让 agent 的 role-play 成果真正生效
+    # （此前 agent 写进 agent_analysis.json 的 per_investor_override 是死字段，
+    #   规则引擎生成的评委判决永远覆盖不过去）
+    _pio = ag.get("per_investor_override") or {}
+    if isinstance(_pio, dict) and _pio:
+        _inv_list = panel.get("investors") or []
+        _by_id = {i.get("investor_id"): i for i in _inv_list}
+        for _id, _ov in _pio.items():
+            _inv = _by_id.get(_id)
+            if not isinstance(_inv, dict):
+                continue
+            for _fld in ("signal", "score", "headline", "reasoning", "comment", "verdict"):
+                if _fld in _ov and _ov[_fld] is not None:
+                    _inv[_fld] = _ov[_fld]
+            # comment 未显式给出时用 headline（保持展示层有内容）
+            if not _inv.get("comment") and _inv.get("headline"):
+                _inv["comment"] = _inv["headline"]
+
     basic = (raw.get("dimensions", {}).get("0_basic") or {}).get("data") or {}
     name = basic.get("name") or raw.get("ticker")
     price = basic.get("price") or 0

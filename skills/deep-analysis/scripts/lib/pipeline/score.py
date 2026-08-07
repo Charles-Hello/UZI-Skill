@@ -93,10 +93,21 @@ def score_from_cache(ticker: str) -> dict:
         json.dumps(panel, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
 
-    # Synthesis（不 merge agent_analysis · stage2/synthesize_and_render 阶段做）
-    synthesis = rrt.generate_synthesis(raw, dims_scored, panel, agent_analysis=None)
+    # v3.9.4 · 读 agent_analysis.json（若存在）→ generate_synthesis 合并
+    # per_investor_override 等角色扮演成果 → 覆盖后写回 panel.json + synthesis.json
+    _aa_path = cache_dir / "agent_analysis.json"
+    _agent_analysis = _read_json(_aa_path)
+    if _agent_analysis:
+        print(f"   🧠 加载 agent_analysis.json · 合并 role-play 成果")
+
+    # Synthesis（合并 agent_analysis · 若存在）
+    synthesis = rrt.generate_synthesis(raw, dims_scored, panel, agent_analysis=_agent_analysis)
     (cache_dir / "synthesis.json").write_text(
         json.dumps(synthesis, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    # 覆盖后的 panel（含 per_investor_override 合并）写回 · stage2 重新读 panel.json 也能拿到
+    (cache_dir / "panel.json").write_text(
+        json.dumps(panel, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
 
     return {
