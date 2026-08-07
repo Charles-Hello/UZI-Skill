@@ -110,6 +110,7 @@ def score_dimensions(raw: dict) -> dict:
     # 4 · 同行
     peers = _get("4_peers")
     peer_table = peers.get("peer_table") or []
+    global_peer_count = int((peers.get("global_peer_comparison") or {}).get("peer_count") or 0)
     score_4 = 5
     if peer_table and len(peer_table) > 1:
         score_4 = 7  # we have data
@@ -123,8 +124,17 @@ def score_dimensions(raw: dict) -> dict:
                     elif self_pe > avg_pe * 1.2: score_4 -= 1
         except Exception:
             pass
+    elif global_peer_count >= 3:
+        score_4 = 7
+    local_peer_count = max(0, len(peer_table) - 1)
+    if global_peer_count:
+        peer_label = f"全球同行 {global_peer_count} 家对比"
+    elif local_peer_count:
+        peer_label = f"同业 {local_peer_count} 家对比"
+    else:
+        peer_label = "无同行数据"
     out["4_peers"] = {"score": score_4, "weight": 4,
-                      "label": f"同业 {len(peer_table) - 1} 家对比" if peer_table else "无同行数据",
+                      "label": peer_label,
                       "reasons_pass": [], "reasons_fail": []}
 
     # 5 · 上下游
@@ -1311,4 +1321,3 @@ def generate_synthesis(raw: dict, dims_scored: dict, panel: dict, agent_analysis
             },
         },
     }
-

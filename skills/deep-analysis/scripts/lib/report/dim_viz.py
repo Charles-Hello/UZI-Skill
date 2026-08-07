@@ -18,6 +18,7 @@ assemble_report.py 做 `from lib.report.dim_viz import *` · 所有历史引用�
 """
 from __future__ import annotations
 
+from lib.report.global_peers import render_global_peer_comparison
 from lib.report.svg_primitives import (
     COLOR_BULL, COLOR_BEAR, COLOR_GOLD, COLOR_CYAN,
     COLOR_BLUE, COLOR_PINK, COLOR_INDIGO, COLOR_MUTED, COLOR_GRID,
@@ -336,6 +337,7 @@ def _viz_peers(raw: dict) -> str:
   </div>
 </div>'''
         viz += '</div>'
+    viz += render_global_peer_comparison(raw.get("global_peer_comparison") or {})
     return viz or '<div style="color:#94a3b8;font-size:11px">未获取同行数据</div>'
 
 
@@ -756,4 +758,3 @@ DIM_VIZ_RENDERERS = {
     "18_trap":         _viz_trap,
     "19_contests":     _viz_contests,
 }
-

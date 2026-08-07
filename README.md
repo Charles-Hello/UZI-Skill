@@ -189,6 +189,8 @@ agent 会用 `--remote` 启动 Cloudflare Tunnel，给你一个 `https://xxx.try
 /stock-deep-analyzer:analyze-stock 002273
 /stock-deep-analyzer:analyze-stock 00700.HK
 /stock-deep-analyzer:analyze-stock AAPL
+/stock-deep-analyzer:analyze-stock 7203.T
+/stock-deep-analyzer:analyze-stock 005930.KS
 ```
 
 ### 专项命令
@@ -482,10 +484,40 @@ Bull ¥26.95 / Base ¥20.73 / Bear ¥14.51，每个情景有概率和假设。
 | 研报 / 公告 | 巨潮 cninfo + akshare | 同花顺 |
 | 港股 | akshare hk | yfinance |
 | 美股 | yfinance | akshare us |
+| 全球同行 | Yahoo Equity Screener + Fundamentals Timeseries | 本地行业同行 + 24h 缓存 |
+| 全球汇率 | Yahoo Chart FX | 原币值始终保留 |
 | 宏观 / 政策 / 舆情 / 杀猪盘 | DuckDuckGo web search | — |
 | **社交热榜**（v2.12 新增） | **微博 / 知乎 / 百度 / 抖音 / 头条 / B 站 · 各平台官方 JSON API** | 5min 文件缓存 · 单平台失败不影响其他 |
 
 多层 fallback 链 — 一个源挂了自动切下一个。
+
+### 全球同行业绩对比
+
+分析单只股票时，`4_peers` 会先保留本地市场同行，再按细分行业发现全球上市公司候选，
+只为相关度最高的 8 家补齐年度财务。报告展示全球同行中位数、目标公司分位、
+营收规模/毛利率散点和跨市场明细表；Comps 估值也会复用有效全球同行。
+
+已识别中国、香港、美国、日本、韩国、台湾、新加坡、印度、加拿大、澳大利亚、
+英国及欧洲主要交易所，并支持 Yahoo 可识别的其他交易所代码作为通用全球标的。
+
+口径约束：
+
+- 年报、季度和 TTM 不混在同一序列。
+- 营收、利润等金额保留原币值，另写基准币换算值；原始值不会被覆盖。
+- 不同币种的原始市值不会直接用于规模相似度评分。
+- 负利润和负 ROE 是有效数据，不会改写成零。
+- 有效同行少于 3 家时只展示数据，不输出全球分位结论。
+- 单个同行或汇率源失败不会中断主报告，失败代码会保留在结果中。
+
+可选配置：
+
+```bash
+# 完全关闭全球同行，只保留原有本地同行
+export UZI_DISABLE_GLOBAL_PEERS=1
+
+# 调整最终补全数量，范围 3-12，默认 8
+export UZI_GLOBAL_PEER_LIMIT=10
+```
 
 ### 📱 6 平台社交热榜（v2.12 新增）
 
@@ -783,7 +815,7 @@ python run.py <ticker> --no-resume
 
 | 版本 | 日期 | 主要变化 |
 |---|---|---|
-| **Unreleased** | 2026-07-18 | **数据完整性 hotfix（issue #87/#90）** · ① EastMoney push2 直连 fallback 集中解析字段 scale：`f170` 才是涨跌幅，`f47` 只作为成交量，`f116/f117` 从元归一化到“亿”，避免涨跌幅和市值派生指标失真。② `stock_features` 自动识别 raw yuan market cap 并转成“亿”，守住 DCF、市占率和评审派生特征口径。③ Comps 估值剔除目标公司自身，有效同行少于 2 家时只提示“同行样本不足”，不再输出假分位和隐含价。④ 美股财务路径合并最近 4 季 quarterly financials 生成 TTM，写明 `financial_basis` / `financial_period`，并对超过 180 天的旧财报打 staleness warning。6 个新回归测试 · 总 663 passed |
+| **Unreleased** | 2026-08-05 | **全球同行业绩对比 + 数据完整性 hotfix** · 自动按全球细分行业发现候选并补全 Top 8 年度财务，覆盖日/韩/台/新/印/加/澳/英/欧洲等 Yahoo 交易所后缀；原币与 USD 标准化值分离，跨币种原始市值不混算，同行失败隔离、后备候选递补并缓存 24h。报告新增目标高亮、同行中位数、全球分位、规模/毛利率散点和明细表，结果接入 Comps 与维度评分。同步包含 issue #87/#90 的行情 scale、自身同行剔除和美股 TTM 修复。22 个全球同行专项测试 · 全量 685 passed |
 | **v3.9.2** | 2026-07-07 | **流程与数据契约 hotfix（issue #82/#83）** · ① `fetch_financials` 显式输出 `ocf` / `ocf_history` / `ocf_to_net_income_ratio`，不再只把经营现金流藏在 `fcf` 字段里；`stock_features` 读入 OCF/净利比，避免 trap-detector 默认 1.0 误判。② `industry=None` 时 `fetch_peers` 返回 self-only fallback + reason，`fetch_valuation` 用 cninfo 市场加权 PE 兜底并标明原因。③ pipeline registry 字段契约对齐 legacy 输出（`financial_health` / `pe_quantile` 等），避免假 data_gaps。④ `agent_analysis.json` 结构性 schema error 现在真正 fallback 到脚本骨架，不再污染 synthesis。⑤ `run.py` 统一 fund summary / `--versus` / `--portfolio` 的浏览器、`--output-dir`、`--remote` 后处理；`cloudflared` 缺失时默认不自动安装，需显式 `--install-cloudflared`。8 个新回归测试 |
 | **v3.9.1** | 2026-06-23 | **HTML 报告导航栏可折叠（issue #79 · @QKioi）** · v3.6.0 加的左侧 sticky 章节导航栏会略微遮挡正文，本次按社区建议加折叠按钮：展开态 `◀`，点一下收起成一个 `☰` 小把手（items 全藏 · 不再压住正文），再点一下展开 · 状态写入 `localStorage`(`uzi-toc-collapsed`) 刷新记忆 · 全程安全 DOM(无 innerHTML) + `aria-expanded` 可访问性. 7 个新回归 · 总 649 passed |
 | **v3.9.0** | 2026-06-11 | **新评委「股海贼王」· 首位从真实交割单蒸馏的评委 (65→66)** · 数据源：淘股吧十年实盘帖 (2016-02 开贴) · 3898 张持仓截图 OCR → **8951 笔反推交割单** + **5069 条发言**. 定量画像：33 万→3131 万 (~95 倍/10 年) · 持仓中位 1 天/P75 3 天 · 同时 3-5 只 · 第一重仓中位 51% · 10 年 2010 只票题材轮动 (鸿博/川能/人民网/大众交通). 方法论蒸馏（风格提炼·不逐字转载原帖）：复盘三问(为啥涨停/板块地位/大盘地位) · 弱转强快速板才算超预期 · 逻辑硬的低位票爆发力足 · 格局票=时代的情绪载体(三五倍格局论) · 反复强调不跟单. 落地：F 组 flagship · 6 条数据驱动规则 (阈值来自其真实行为统计) · 台词按风格原创撰写 · `docs/ghzw-dossier.md` 蒸馏档案. **原始交割单/截图/发言均为本地数据 · 未入库.** 实测：鸿博式妖股 bullish 100 (他真做过 22 次) · 茅台 bearish 9.5 · 美股 skip. 10 个新回归 · 总 642 passed |

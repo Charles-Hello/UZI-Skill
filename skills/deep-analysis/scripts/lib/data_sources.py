@@ -871,7 +871,8 @@ def _fetch_basic_hk(ti: TickerInfo) -> dict:
 def _fetch_basic_us(ti: TickerInfo) -> dict:
     if yf is None:
         raise RuntimeError("yfinance not installed")
-    t = yf.Ticker(ti.code)
+    from .global_peers import to_yahoo_symbol
+    t = yf.Ticker(to_yahoo_symbol(ti))
     info = _retry(lambda: t.info)
     return {
         "code": ti.full,
@@ -909,9 +910,7 @@ def _fetch_kline_impl(ti: TickerInfo, period: str, start: str, adjust: str) -> l
         return _kline_a_share_chain(ti, period, start, adjust)
     if ti.market == "H":
         return _kline_hk_chain(ti, period, start, adjust)
-    if ti.market == "U":
-        return _kline_us_chain(ti)
-    return []
+    return _kline_us_chain(ti)
 
 
 def _kline_a_share_chain(ti: TickerInfo, period: str, start: str, adjust: str) -> list[dict]:
@@ -1182,9 +1181,11 @@ def _yahoo_v8_chart(symbol: str, range_: str = "2y") -> list[dict]:
 
 def _kline_us_chain(ti: TickerInfo) -> list[dict]:
     """US K-line: yfinance → akshare → yahoo v8 → stooq HTTP fallback."""
+    from .global_peers import to_yahoo_symbol
+    symbol = to_yahoo_symbol(ti)
     if yf:
         try:
-            t = yf.Ticker(ti.code)
+            t = yf.Ticker(symbol)
             df = _retry(lambda: t.history(period="2y", interval="1d"), attempts=2)
             if df is not None and len(df) > 0:
                 df = df.reset_index()
@@ -1193,18 +1194,18 @@ def _kline_us_chain(ti: TickerInfo) -> list[dict]:
             pass
     if ak:
         try:
-            df = ak.stock_us_hist(symbol=ti.code, period="daily", start_date="20240101", adjust="qfq")
+            df = ak.stock_us_hist(symbol=symbol, period="daily", start_date="20240101", adjust="qfq")
             if df is not None and len(df) > 0:
                 return df.to_dict("records")
         except Exception:
             pass
     # v2.13.7 · Yahoo Chart v8 HTTP（绕开 yfinance cookie/crumb 机制，更稳）
-    rows = _yahoo_v8_chart(ti.code, range_="2y")
+    rows = _yahoo_v8_chart(symbol, range_="2y")
     if rows:
         return rows
     if requests:
         try:
-            url = f"https://stooq.com/q/d/l/?s={ti.code.lower()}.us&i=d"
+            url = f"https://stooq.com/q/d/l/?s={symbol.lower()}.us&i=d"
             r = requests.get(url, timeout=12)
             lines = r.text.strip().splitlines()
             if len(lines) > 1:

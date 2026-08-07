@@ -8,6 +8,7 @@ import time
 
 import akshare as ak  # type: ignore
 from lib import data_sources as ds
+from lib.global_peers import fetch_global_peer_comparison
 from lib.market_router import parse_ticker
 
 
@@ -33,6 +34,34 @@ def _build_self_only_table(ti, basic: dict) -> tuple[list, list]:
         "is_self": True,
     }
     return [self_row], []
+
+
+def _attach_global_peers(data: dict, ti, basic: dict) -> dict:
+    """Attach global peers without allowing the optional source to fail dim 4."""
+    out = dict(data)
+    if os.getenv("UZI_DISABLE_GLOBAL_PEERS", "").strip().lower() in {"1", "true", "yes"}:
+        out["global_peer_comparison"] = {"conclusion_status": "disabled", "peer_count": 0}
+        return out
+    if not (basic.get("name") and basic.get("industry")):
+        out["global_peer_comparison"] = {
+            "conclusion_status": "insufficient_target_profile",
+            "peer_count": 0,
+        }
+        return out
+    try:
+        limit = max(3, min(int(os.getenv("UZI_GLOBAL_PEER_LIMIT", "8")), 12))
+        out["global_peer_comparison"] = fetch_global_peer_comparison(
+            ti,
+            basic=basic,
+            limit=limit,
+        )
+    except Exception as exc:
+        out["global_peer_comparison"] = {
+            "conclusion_status": "unavailable",
+            "peer_count": 0,
+            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+        }
+    return out
 
 
 def main(ticker: str) -> dict:
@@ -74,9 +103,7 @@ def main(ticker: str) -> dict:
         # rank string for the report
         mcap_rank = scale.get("market_cap_rank")
         rank_str = f"HK 第 {mcap_rank} 位（按总市值）" if mcap_rank else "—"
-        return {
-            "ticker": ti.full,
-            "data": {
+        hk_data = _attach_global_peers({
                 "industry": industry or "未分类（akshare HK 无行业聚合）",
                 "self": basic,
                 "peer_table": peer_table,
@@ -84,7 +111,10 @@ def main(ticker: str) -> dict:
                 "rank": rank_str,
                 "peers_top20_raw": [],
                 "_note": "HK peer LIST 需走 AASTOCKS Playwright 或问财；本字段提供 rank-in-universe 作替代",
-            },
+            }, ti, basic)
+        return {
+            "ticker": ti.full,
+            "data": hk_data,
             "source": "akshare:hk_valuation_comparison_em + scale_comparison_em + growth_comparison_em",
             "fallback": False,
         }
@@ -190,9 +220,7 @@ def main(ticker: str) -> dict:
                 fallback_reason = "所有同行数据源失败 · 仅返回公司自身"
             source_used += " (self-only fallback)"
 
-    return {
-        "ticker": ti.full,
-        "data": {
+    local_data = _attach_global_peers({
             "industry": industry,
             "self": basic,
             "peer_table": peer_table,
@@ -200,7 +228,10 @@ def main(ticker: str) -> dict:
             "rank": "—",  # 真实排名需要 聚合查询
             "peers_top20_raw": peers_raw[:20],
             "fallback_reason": fallback_reason,  # v2.12.1
-        },
+        }, ti, basic)
+    return {
+        "ticker": ti.full,
+        "data": local_data,
         "source": source_used,
         "fallback": fallback_used,
     }
