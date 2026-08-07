@@ -153,7 +153,6 @@ def extract_features(raw: dict, dims: dict) -> dict:
         default=0,
     )
     f["roic"] = _f(health.get("roic"))
-    f["fcf_positive"] = f["fcf_margin"] > 0
 
     # v3.8.0 · DuPont 杜邦分解 · 暴露给评委/报告 (价值派看 ROE 质量来源)
     _dupont = fin.get("dupont") or {}
@@ -362,6 +361,9 @@ def extract_features(raw: dict, dims: dict) -> dict:
     f["bvps"] = round(eq / f["shares_outstanding_yi"], 3) if f["shares_outstanding_yi"] > 0 else 0
     # FCF latest (proxy from net_income × 0.8 if not present)
     f["fcf_latest_yi"] = round(latest_ni * 0.8, 2) if latest_ni > 0 else 0
+    # v3.9.4 · fcf_positive 用真实 FCF（fcf_latest_yi > 0）判断，不再用 fcf_margin。
+    # fcf_margin 实际是 OCF/净利比，且现金流数据缺失时为 0 → 茅台被误判"现金流为负"。
+    f["fcf_positive"] = f["fcf_latest_yi"] > 0
     # EBITDA (proxy: net_income / 0.6)
     f["ebitda_yi"] = round(latest_ni / 0.6, 2) if latest_ni > 0 else 0
     # Debt and cash (from financial_health if available; else default)
