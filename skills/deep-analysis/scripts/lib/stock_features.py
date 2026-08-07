@@ -392,10 +392,12 @@ def extract_features(raw: dict, dims: dict) -> dict:
         f["market_share"] = round(_cmcap_yi / _imcap_yi * 100, 2)
     else:
         f["market_share"] = 0.0
-    # Dividend yield from valuation/basic
-    f["dividend_yield"] = _f(valuation.get("dividend_yield"), default=0)
-    # PEG
-    peg_val = f.get("pe", 0) / f.get("rev_growth_3y", 1) if f.get("rev_growth_3y", 0) > 0 else 99
+    # Dividend yield from valuation/basic (v3.9.4 · 不再用 valuation 覆盖 basic 的真实分红率)
+    _div_basic = _f(basic.get("dividend_yield_ttm"))
+    f["dividend_yield"] = _div_basic if _div_basic else _f(valuation.get("dividend_yield"), default=0)
+    # PEG (v3.9.4 · 修孤儿键:rev_growth_3y → revenue_growth_3y_cagr,此前恒取 99)
+    _g3y = f.get("revenue_growth_3y_cagr", 0) or 0
+    peg_val = f.get("pe", 0) / _g3y if _g3y > 0 else 99
     f["peg"] = round(peg_val, 2)
     # Gross margin trend flag
     f["gross_margin_expanding"] = False  # default; could be computed from hist
@@ -571,6 +573,15 @@ def extract_features(raw: dict, dims: dict) -> dict:
     else:
         _score = 8.0 * _elasticity                    # 不在链上 → 接近 0
     f["ai_chokepoint_score"] = round(_score, 1)
+
+    # ─────────────── 兼容别名 · v3.9.4 ───────────────
+    # 规则引擎引用了以下键，但历史命名不一致导致恒取默认值(0/False) → 规则静默失效。
+    # 这里统一补齐别名，让规则层的 get() 拿到正确值。
+    f["pe_ttm"] = f.get("pe", 0)                     # 规则用 pe_ttm · 特征层只有 pe
+    f["rev_growth_3y"] = f.get("revenue_growth_3y_cagr", 0)   # 规则用 rev_growth_3y
+    f["rev_growth_yoy"] = f.get("revenue_growth_latest", 0)   # 规则用 rev_growth_yoy
+    f["roe"] = f.get("roe_latest", 0)                # 规则用裸 roe · 特征层只有 roe_latest
+    f["net_profit_growth_3y"] = f.get("net_profit_growth_latest", 0)
 
     return f
 

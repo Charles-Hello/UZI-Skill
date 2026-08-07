@@ -62,7 +62,21 @@ def score_from_cache(ticker: str) -> dict:
     except Exception as e:
         print(f"   ⚠️ Playwright 兜底跳过: {type(e).__name__}: {str(e)[:80]}")
 
-    # 重新写回 raw_data.json（autofill 已修改）
+    # v3.9.4 · 机构建模 dim 20/21/22 —— 与 legacy stage1 保持一致
+    # （此前 pipeline 从未计算这三个维度，导致默认路径报告缺整个机构建模章节）
+    try:
+        from compute_deep_methods import compute_dim_20, compute_dim_21, compute_dim_22
+        from lib.stock_features import extract_features
+        _features_pre = extract_features(raw, raw.get("dimensions", {}))
+        raw["dimensions"]["20_valuation_models"] = compute_dim_20(_features_pre, raw)
+        _d20 = raw["dimensions"]["20_valuation_models"]["data"]
+        raw["dimensions"]["21_research_workflow"] = compute_dim_21(_features_pre, raw, _d20)
+        _d21 = raw["dimensions"]["21_research_workflow"]["data"]
+        raw["dimensions"]["22_deep_methods"] = compute_dim_22(_features_pre, raw, _d20, _d21)
+    except Exception as e:
+        print(f"   ⚠️ 机构建模 dim 20/21/22 计算失败: {type(e).__name__}: {str(e)[:100]}")
+
+    # 重新写回 raw_data.json（autofill 已修改 · dim 20-22 已就位）
     raw_path.write_text(
         json.dumps(raw, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
