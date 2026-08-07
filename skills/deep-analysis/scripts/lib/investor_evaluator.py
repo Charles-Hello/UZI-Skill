@@ -126,12 +126,21 @@ def _extract_keys(template: str) -> list[str]:
     return re.findall(r"\{([a-zA-Z_][a-zA-Z0-9_]*)", template)
 
 
-def _safe_check(rule: Rule, features: dict) -> bool:
-    """Run rule.check guarded against exceptions (missing features, type errors)."""
+def _safe_check(rule: Rule, features: dict) -> bool | None:
+    """Run rule.check guarded against exceptions.
+
+    Returns:
+        True  → rule passes
+        False → rule fails
+        None  → data missing (rule references a feature whose value is None).
+                Caller should treat this as "skip" (not pass, not fail).
+    """
     try:
         return bool(rule.check(features))
     except (KeyError, TypeError, ValueError, ZeroDivisionError):
-        return False
+        # 数据缺失导致比较类型错误（如 None >= 5）→ 跳过，不判负。
+        # 有真实数据的规则不会走到这里（键值都是数值）。
+        return None
 
 
 def evaluate(investor_id: str, features: dict) -> dict:
@@ -181,8 +190,12 @@ def evaluate(investor_id: str, features: dict) -> dict:
     weight_total = 0
 
     for rule in rules:
+        _check = _safe_check(rule, features)
+        if _check is None:
+            # 数据缺失 → 规则跳过，不占 weight_total（避免无数据恒 fail 拉低分）
+            continue
         weight_total += rule.weight
-        if _safe_check(rule, features):
+        if _check:
             weight_pass += rule.weight
             pass_list.append({
                 "rule_id": rule.rule_id,

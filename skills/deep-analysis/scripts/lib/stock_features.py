@@ -583,6 +583,22 @@ def extract_features(raw: dict, dims: dict) -> dict:
     f["roe"] = f.get("roe_latest", 0)                # 规则用裸 roe · 特征层只有 roe_latest
     f["net_profit_growth_3y"] = f.get("net_profit_growth_latest", 0)
 
+    # ─────────────── 数据不足标记 · v3.9.4 ───────────────
+    # 以下键被 v3.7 新评委（Andreessen/Chanos/Musk/Saylor 等）的规则引用，且是这些规则的
+    # 唯一判断依据（无主备分支），但没有任何 fetcher 提供对应数据源。置 None → 规则层
+    # 识别为"数据缺失"→ 跳过（不 pass 也不 fail），避免这些评委因无数据被系统性判负。
+    # 注意：只在"唯一依赖"时设 None；有备选键（如 network_effect_score 有 moat_total 兜底）
+    # 必须保持缺失，否则 None >= 6 抛错会吞掉整条规则的有效判断。
+    _NO_DATA_KEYS = (
+        "founder_active", "founder_ownership_pct", "ev_to_revenue",
+        "governance_score", "insider_selling_recent", "retail_holding_pct",
+        "ceo_promotional_score", "audit_qualified", "off_balance_debt_ratio",
+        "rev", "revenue_b", "rd_intensity", "capex_growth_yoy",
+        "btc_holdings_b", "cash_to_marketcap_ratio", "rev_growth_3y_pct",
+    )
+    for _k in _NO_DATA_KEYS:
+        f[_k] = None
+
     return f
 
 
