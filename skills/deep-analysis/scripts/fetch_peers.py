@@ -240,6 +240,61 @@ def main(ticker: str) -> dict:
             except Exception as e:
                 peers_raw.append({"tier": 3, "error": f"{type(e).__name__}: {str(e)[:200]}"})
 
+        # ─── Tier 3.5 · v3.9.4 · push2 全挂时用 INDUSTRY_PEERS 硬编码同行兜底 ───
+        # 白酒/半导体等行业在 fetch_similar_stocks.INDUSTRY_PEERS 有真实同行列表，
+        # 用 stock_financial_analysis_indicator_em（不走 push2）拉它们的估值。
+        if not peer_table:
+            try:
+                from fetch_similar_stocks import INDUSTRY_PEERS
+                _peers = INDUSTRY_PEERS.get(industry, [])
+                if _peers:
+                    import pandas as _pd
+                    _rows = []
+                    for _pc, _pn in _peers[:6]:
+                        _code = _pc + (".SH" if _pc.startswith("6") else ".SZ")
+                        try:
+                            _df = ak.stock_financial_analysis_indicator_em(symbol=_code)
+                            _roe = "—"
+                            _rev = 0.0
+                            if _df is not None and not _df.empty:
+                                # 取最新一期非空 ROEJQ（末尾行可能是 NaN）
+                                _last = _df.iloc[-1]
+                                if "ROEJQ" in _df.columns:
+                                    _ser = _df["ROEJQ"].dropna()
+                                    _v = float(_ser.iloc[-1]) if len(_ser) else None
+                                    _roe = f"{_v:.1f}" if _v else "—"
+                                if "TOTALOPERATEREVE" in _df.columns:
+                                    _rev = _float(_last.get("TOTALOPERATEREVE"))
+                            # 同行名单至少要有名称/代码（即使无 PE/PB 也比"暂无可比股"强）
+                            _rows.append({
+                                "代码": _pc, "名称": _pn,
+                                "总市值": _rev,
+                                "市盈率-动态": 0,
+                                "市净率": 0,
+                                "_roe": _roe,
+                            })
+                        except Exception:
+                            continue
+                    if _rows:
+                        _xdf = _pd.DataFrame(_rows)
+                        peers_raw, peer_table, peer_comparison = _parse_peer_df(_xdf, ti.code)
+                        # 把 _roe 填回 peer_table（_parse_peer_df 内 ROE 补充逻辑拿不到这里的字段名）
+                        _by_code = {str(r["代码"]): r["_roe"] for r in _rows}
+                        for _p in peer_table:
+                            _pc = str(_p.get("code", "")).split(".")[0]
+                            if _pc in _by_code:
+                                _p["roe"] = _by_code[_pc]
+                        # self 行的 PE/PB 从 basic 补回（_rows 里 PE/PB 是 0，会覆盖真实值）
+                        for _p in peer_table:
+                            if _p.get("is_self"):
+                                _p["pe"] = f"{_float(basic.get('pe_ttm')):.1f}" if _float(basic.get("pe_ttm")) > 0 else "—"
+                                _p["pb"] = f"{_float(basic.get('pb')):.2f}" if _float(basic.get("pb")) > 0 else "—"
+                        fallback_used = True
+                        fallback_reason = "push2 失败 · INDUSTRY_PEERS 硬编码同行兜底"
+                        source_used = "akshare:stock_financial_analysis_indicator_em (INDUSTRY_PEERS)"
+            except Exception as e:
+                peers_raw.append({"tier": 3.5, "error": f"{type(e).__name__}: {str(e)[:200]}"})
+
         # ─── Tier 4 保底：仅公司自己一行 + fallback 标记 ───
         if not peer_table:
             peer_table, peer_comparison = _build_self_only_table(ti, basic)
