@@ -1,5 +1,34 @@
 # Release Notes
 
+## v3.9.3 — 2026-08-07 (茅台深度实测驱动的数据/渲染修复 + Codex 评审)
+
+### 🐛 数据修复
+
+- **现金流误判**：`fcf_positive` 从 OCF/净利比改为真实 FCF，茅台(FCF 658亿)不再显示"现金流为负"；`_ic_risks` 的"行业周期下行"不再无条件追加，仅行业判定衰退时才算
+- **同行修复**：push2 被反爬时 4_peers 曾只剩自己一行("暂无可比股")——新增 INDUSTRY_PEERS 硬编码同行兜底(白酒→五粮液/泸州老窖/洋河/山西汾酒)，用 `stock_financial_analysis_indicator_em`(不走 push2)拉 ROE
+
+### 🎨 渲染修复
+
+- 评委 pass/fail dict 不再泄漏成 Python 字面量(报告曾出现 162 处 `{'msg':...}`)
+- 4_peers 对比条 `abs(None)` 崩溃
+- 一致目标价不再显示"(None)"
+
+### ⚙️ 流程修复
+
+- **deep 档强制 agent 介入 role-play**：`--depth deep` 不再 CLI 一把梭，须 stage1 → 读 persona → 写 agent_analysis.json(`per_investor_override` 已能真正合并)
+
+### 🧪 Codex 评审反馈 (P1/P2)
+
+- `fcf_positive` 优先用真实经营现金流(净利×0.8 仅作缺失回退)
+- 同行兜底补别名匹配(集成电路→半导体 / 工业金属→有色金属)，且被分析股不在同行列表时补 self 行
+- HK rank-only 的 `peer="—"` 不再被渲染成 0 对比条
+
+### 🧪 测试
+
+45+ 回归测试 · **685/685 全过**
+
+---
+
 ## v3.9.1 — 2026-06-23 (HTML 报告导航栏可折叠 · issue #79)
 
 ### ✨ 新增 · 左侧导航栏折叠/展开

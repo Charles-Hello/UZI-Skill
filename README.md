@@ -12,7 +12,7 @@
 [![Methods](https://img.shields.io/badge/Institutional%20Methods-22-red)]()
 [![Self-Review](https://img.shields.io/badge/Self--Review-13%20checks-blueviolet)](skills/deep-analysis/scripts/lib/self_review.py)
 
-A 股 / 港股 / 美股 · 个股深度分析引擎 · **66 位评审团 × 9 大流派 × 22 维数据 × 22 种机构方法** · 最新 **v3.9.2**：修复 OCF / industry=None / CLI 后处理流程（issue #82/#83）· 完整演进见 [更新日志](#-更新日志)
+A 股 / 港股 / 美股 · 个股深度分析引擎 · **66 位评审团 × 9 大流派 × 22 维数据 × 22 种机构方法** · 最新 **v3.9.3**：茅台深度实测驱动的数据/渲染修复 + Codex 评审反馈 · 完整演进见 [更新日志](#-更新日志)
 
 [安装](#安装) · [用法](#用法) · [三档深度](#-三档思考深度v2103-新增) · [Hermes 🆕](INSTALL-HERMES.md) · [评审团](#-66-位评审团) · [Serenity 🆕](#-i-组--serenity--ai-卡位瓶颈猎手) · [机构方法](#-22-种机构级方法) · [自查 gate](#-机械级自查-gatev29-起) · [报告截图](#-报告长什么样) · [FAQ](#-faq) · [入群交流测试](#-测试交流群) · [Contributors](CONTRIBUTORS.md)
 
@@ -45,7 +45,7 @@ A 股 / 港股 / 美股 · 个股深度分析引擎 · **66 位评审团 × 9 �
 /stock-deep-analyzer:dcf 600519                ← DCF 估值专项
 ```
 
-> 💡 **当前最新稳定版 v3.9.2** · 完整演进见 [更新日志](#-更新日志)：
+> 💡 **当前最新稳定版 v3.9.3** · 完整演进见 [更新日志](#-更新日志)：
 > - **66 位评审团 · 9 大流派**（v3.7 新增 a16z Andreessen / Naval / 黄仁勋 / 马斯克 / 高瓴张磊 / Burry / Chanos 等 13 位 + 独立 I 组 Serenity AI 卡位猎手）· 242 条量化规则
 > - **Serenity 严谨化**（v3.8）：8 罚分因子 + 3 级证据阶梯（"有定点量产"≈90 分 vs "仅题材"≈60 分）+ 供应链 8 层分层
 > - **Tier-1 五方法**（v3.8）：`/ai-readiness` `/earnings-preview` `/model-update` `/returns` `/rebalance`
@@ -816,7 +816,7 @@ python run.py <ticker> --no-resume
 | 版本 | 日期 | 主要变化 |
 |---|---|---|
 | **Unreleased** | 2026-08-05 | **全球同行业绩对比 + 数据完整性 hotfix** · 自动按全球细分行业发现候选并补全 Top 8 年度财务，覆盖日/韩/台/新/印/加/澳/英/欧洲等 Yahoo 交易所后缀；原币与 USD 标准化值分离，跨币种原始市值不混算，同行失败隔离、后备候选递补并缓存 24h。报告新增目标高亮、同行中位数、全球分位、规模/毛利率散点和明细表，结果接入 Comps 与维度评分。同步包含 issue #87/#90 的行情 scale、自身同行剔除和美股 TTM 修复。22 个全球同行专项测试 · 全量 685 passed |
-| **v3.9.3** | 2026-08-07 | **茅台深度实测驱动的数据/渲染修复** · ① 现金流误判：`fcf_positive` 从 OCF/净利比改为真实 FCF，茅台(FCF 658亿)不再显示"现金流为负"；`_ic_risks` 的"行业周期下行"不再无条件追加，仅行业判定衰退时才算。② 同行修复：push2 被反爬时 4_peers 曾只剩自己一行("暂无可比股")——新增 INDUSTRY_PEERS 硬编码同行兜底(白酒→五粮液/泸州老窖/洋河/山西汾酒)，用 `stock_financial_analysis_indicator_em`(不走 push2)拉 ROE。③ 渲染修复：评委 pass/fail dict 不再泄漏成 Python 字面量(报告曾出现 162 处 `{'msg':...}`)；4_peers 对比条 `abs(None)` 崩溃；一致目标价不再显示"(None)"。④ deep 档强制 agent 介入 role-play：`--depth deep` 不再 CLI 一把梭，须 stage1 → 读 persona → 写 agent_analysis.json(`per_investor_override` 已能真正合并)。45+ 回归测试 |
+| **v3.9.3** | 2026-08-07 | **茅台深度实测驱动的数据/渲染修复** · ① 现金流误判：`fcf_positive` 从 OCF/净利比改为真实 FCF，茅台(FCF 658亿)不再显示"现金流为负"；`_ic_risks` 的"行业周期下行"不再无条件追加，仅行业判定衰退时才算。② 同行修复：push2 被反爬时 4_peers 曾只剩自己一行("暂无可比股")——新增 INDUSTRY_PEERS 硬编码同行兜底(白酒→五粮液/泸州老窖/洋河/山西汾酒)，用 `stock_financial_analysis_indicator_em`(不走 push2)拉 ROE。③ 渲染修复：评委 pass/fail dict 不再泄漏成 Python 字面量(报告曾出现 162 处 `{'msg':...}`)；4_peers 对比条 `abs(None)` 崩溃；一致目标价不再显示"(None)"。④ deep 档强制 agent 介入 role-play：`--depth deep` 不再 CLI 一把梭，须 stage1 → 读 persona → 写 agent_analysis.json(`per_investor_override` 已能真正合并)。⑤ Codex 评审反馈(P1/P2)：`fcf_positive` 优先用真实经营现金流(净利×0.8 仅作缺失回退)；同行兜底补别名匹配(集成电路→半导体 / 工业金属→有色金属)且被分析股不在同行列表时补 self 行；HK rank-only 的 `peer="—"` 不再被渲染成 0 对比条。45+ 回归测试 |
 | **v3.9.2** | 2026-07-07 | **流程与数据契约 hotfix（issue #82/#83）** · ① `fetch_financials` 显式输出 `ocf` / `ocf_history` / `ocf_to_net_income_ratio`，不再只把经营现金流藏在 `fcf` 字段里；`stock_features` 读入 OCF/净利比，避免 trap-detector 默认 1.0 误判。② `industry=None` 时 `fetch_peers` 返回 self-only fallback + reason，`fetch_valuation` 用 cninfo 市场加权 PE 兜底并标明原因。③ pipeline registry 字段契约对齐 legacy 输出（`financial_health` / `pe_quantile` 等），避免假 data_gaps。④ `agent_analysis.json` 结构性 schema error 现在真正 fallback 到脚本骨架，不再污染 synthesis。⑤ `run.py` 统一 fund summary / `--versus` / `--portfolio` 的浏览器、`--output-dir`、`--remote` 后处理；`cloudflared` 缺失时默认不自动安装，需显式 `--install-cloudflared`。8 个新回归测试 |
 | **v3.9.1** | 2026-06-23 | **HTML 报告导航栏可折叠（issue #79 · @QKioi）** · v3.6.0 加的左侧 sticky 章节导航栏会略微遮挡正文，本次按社区建议加折叠按钮：展开态 `◀`，点一下收起成一个 `☰` 小把手（items 全藏 · 不再压住正文），再点一下展开 · 状态写入 `localStorage`(`uzi-toc-collapsed`) 刷新记忆 · 全程安全 DOM(无 innerHTML) + `aria-expanded` 可访问性. 7 个新回归 · 总 649 passed |
 | **v3.9.0** | 2026-06-11 | **新评委「股海贼王」· 首位从真实交割单蒸馏的评委 (65→66)** · 数据源：淘股吧十年实盘帖 (2016-02 开贴) · 3898 张持仓截图 OCR → **8951 笔反推交割单** + **5069 条发言**. 定量画像：33 万→3131 万 (~95 倍/10 年) · 持仓中位 1 天/P75 3 天 · 同时 3-5 只 · 第一重仓中位 51% · 10 年 2010 只票题材轮动 (鸿博/川能/人民网/大众交通). 方法论蒸馏（风格提炼·不逐字转载原帖）：复盘三问(为啥涨停/板块地位/大盘地位) · 弱转强快速板才算超预期 · 逻辑硬的低位票爆发力足 · 格局票=时代的情绪载体(三五倍格局论) · 反复强调不跟单. 落地：F 组 flagship · 6 条数据驱动规则 (阈值来自其真实行为统计) · 台词按风格原创撰写 · `docs/ghzw-dossier.md` 蒸馏档案. **原始交割单/截图/发言均为本地数据 · 未入库.** 实测：鸿博式妖股 bullish 100 (他真做过 22 次) · 茅台 bearish 9.5 · 美股 skip. 10 个新回归 · 总 642 passed |
