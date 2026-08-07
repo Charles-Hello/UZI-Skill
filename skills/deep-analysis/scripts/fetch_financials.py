@@ -520,14 +520,24 @@ def _fetch_us(ti) -> dict:
 
         # v3.9.4 · 从资产负债表补 net-debt bridge（此前 total_debt/cash 恒缺 → DCF 把 EV 当股权价值）
         if bs is not None and not bs.empty:
+            def _latest_bs_value(row_label: str):
+                """取某行标签的最新一期非空值 · yfinance 列是 Timestamp(新→旧) · 行标签是 str"""
+                if row_label not in bs.index:
+                    return None
+                _ser = bs.loc[row_label]
+                for _v in _ser:  # 列从最新到最旧 · 取第一个非空
+                    if _to_float(_v):
+                        return _v
+                return None
+
             _debt_row = _financial_row(bs, ["Total Debt", "TotalDebt", "Long Term Debt And Capital Lease Obligations"])
             _cash_row = _financial_row(bs, ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"])
             if _debt_row is not None:
-                _debt_last = bs.iloc[_debt_row, -1] if len(bs.columns) > 0 else None
+                _debt_last = _latest_bs_value(_debt_row)
                 if _to_float(_debt_last):
                     out.setdefault("financial_health", {})["total_debt"] = round(_to_float(_debt_last) / 1e8, 2)
             if _cash_row is not None:
-                _cash_last = bs.iloc[_cash_row, -1] if len(bs.columns) > 0 else None
+                _cash_last = _latest_bs_value(_cash_row)
                 if _to_float(_cash_last):
                     out.setdefault("financial_health", {})["cash"] = round(_to_float(_cash_last) / 1e8, 2)
         return out
