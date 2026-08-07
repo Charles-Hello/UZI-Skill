@@ -1324,17 +1324,19 @@ def generate_synthesis(raw: dict, dims_scored: dict, panel: dict, agent_analysis
                 "chips": kline.get("ma_align", "—"),
             },
             "intelligence": {
-                "news": "近期新闻 + 公告已采集",
+                # v3.9.4 · 不再虚构 "近期新闻 + 公告已采集" · 用真实事件数
+                "news": f"已采集 {len((d21.get('catalyst_calendar') or {}).get('events') or [])} 项催化剂事件",
                 "risks": risks[:3],
                 "catalysts": [
                     e.get("event", "季报")[:30]
                     for e in ((d21.get("catalyst_calendar") or {}).get("events") or [])
                     if e.get("impact") in ("high", "medium")
-                ][:3] or ["季报窗口", "行业事件"],
+                ][:3] or ["暂无明确催化剂"],
             },
             "battle_plan": {
                 "entry": f"¥{round(price * 0.92, 2) if price else '—'}",
-                "position": "50% 起步",
+                # v3.9.4 · 不再虚构 "50% 起步" · 无依据的仓位比例删掉，改为分批建仓提示
+                "position": "分批建仓 · 勿满仓",
                 "stop": f"¥{round(price * 0.85, 2) if price else '—'}",
                 "target": f"¥{round(price * 1.25, 2) if price else '—'}",
             },
