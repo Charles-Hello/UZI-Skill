@@ -370,7 +370,15 @@ def _viz_research(raw: dict) -> str:
         ("中性", neu_n, COLOR_MUTED),
     ], label=f"{total}家")
     target_avg = raw.get("target_avg", "—")
-    upside = raw.get("upside", "—")
+    upside = raw.get("upside")
+    # v3.9.4 · upside 缺失时不显示 "¥x (None)" · 用真实计算或 "—"
+    if upside is None or upside in ("", "None"):
+        _px = raw.get("price") or 0
+        _ta = float(target_avg) if str(target_avg).replace(".", "").isdigit() else 0
+        if _px and _ta:
+            upside = f"{(_ta - _px) / _px * 100:+.1f}%"
+        else:
+            upside = "—"
     tail = f'''<div style="display:flex;justify-content:space-between;margin-top:10px;padding:8px;background:#fef3c7;border-radius:6px">
   <span style="font-family:Fira Code;font-size:10px;color:#64748b">一致目标价</span>
   <span style="font-family:Fira Code;font-size:12px;color:#d97706;font-weight:700">{target_avg} ({upside})</span>
