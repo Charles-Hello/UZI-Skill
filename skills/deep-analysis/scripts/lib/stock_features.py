@@ -369,8 +369,10 @@ def extract_features(raw: dict, dims: dict) -> dict:
     f["total_debt_yi"] = _f(health.get("total_debt"), 0) if isinstance(health, dict) else 0
     f["cash_yi"] = _f(health.get("cash"), 0) if isinstance(health, dict) else 0
     f["equity_yi"] = _f(health.get("equity"), 0) if isinstance(health, dict) else 0
-    # Gross margin (%)
-    f["gross_margin"] = _f(fin.get("gross_margin"), default=f.get("net_margin", 10) + 18)
+    # Gross margin (%) · v3.9.4 · 不再用 net_margin+18 捏造 —— 缺数据时置 0，
+    # 依赖毛利率的规则按"无数据"判 fail（此前 35% 净利率会被造出 53% 毛利率，让
+    # gurley/chamath/jensen_huang 的毛利率阈值误 pass）
+    f["gross_margin"] = _f(fin.get("gross_margin")) if _f(fin.get("gross_margin")) else 0
     # PS ratio
     rev = f.get("revenue_latest_yi", 0)
     f["ps"] = round(mcap / rev, 2) if rev > 0 else 0

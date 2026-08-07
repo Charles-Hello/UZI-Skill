@@ -103,13 +103,24 @@ def compute_dcf(features: dict, assumptions: dict | None = None) -> dict:
 
     # Base FCF — if missing, approximate from revenue × net_margin × 0.8
     fcf0 = _num(features.get("fcf_latest_yi"))
+    _fcf_proxy = False
     if fcf0 <= 0:
         rev = _num(features.get("revenue_latest_yi"))
         nm = _num(features.get("net_margin")) / 100
         fcf0 = rev * nm * 0.8  # rough FCF ≈ 80% of net income
+        _fcf_proxy = True
     if fcf0 <= 0:
-        # Final fallback: proxy from market_cap assuming 5% FCF yield
-        fcf0 = _num(features.get("market_cap_yi")) * 0.05
+        # v3.9.4 · 数据完全缺失时不再用"市值×5% yield"假兜底 —— 那会把数据空洞算成
+        # "基本合理"。直接标数据不足，让调用方（报告）显示"无法估值"而非假中性结论。
+        return {
+            "method": "DCF (2-stage + Gordon Growth terminal)",
+            "verdict": "⛔ 数据不足 · 无法 DCF",
+            "intrinsic_per_share": None,
+            "safety_margin_pct": None,
+            "error": "FCF / 营收 / 净利率均缺失",
+            "methodology_log": ["DCF 跳过 · FCF、营收、净利率均无数据"],
+            "assumptions": a,
+        }
 
     # Stage 1: high growth
     projected_fcf: list[float] = []
