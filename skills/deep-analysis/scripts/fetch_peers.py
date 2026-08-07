@@ -150,14 +150,42 @@ def main(ticker: str) -> dict:
 
         tbl = ([self_row] if self_row else []) + peers_top5
 
+        # v3.9.4 · 同行 ROE 补充（参考 stock_web._fetch_peer · 不走 push2 更稳）
+        # 只给 top 同行补 ROE · 单只失败静默跳过 · 不阻塞主流程
+        try:
+            _roe_cache = {}
+            for _p in tbl:
+                _c = str(_p.get("code", ""))
+                if not _c or _c in _roe_cache:
+                    _p["roe"] = _roe_cache.get(_c, "—")
+                    continue
+                try:
+                    _ind = ak.stock_financial_analysis_indicator_em(symbol=f"{_c}.{('SH' if _c.startswith(('6','9')) else 'SZ')}")
+                    if _ind is not None and not _ind.empty and "ROEJQ" in _ind.columns:
+                        _annual = _ind[_ind.get("REPORT_DATE_NAME", _ind.iloc[:, 0]).astype(str).str.contains("年报", na=False)]
+                        _src = _annual if not _annual.empty else _ind
+                        _v = _float(_src.iloc[-1].get("ROEJQ"))
+                        _p["roe"] = f"{_v:.1f}" if _v else "—"
+                        _roe_cache[_c] = _p["roe"]
+                except Exception:
+                    _roe_cache[_c] = "—"
+        except Exception:
+            pass
+
         def _avg(col):
             if col not in df.columns: return 0.0
             vals = [_float(v) for v in df[col] if _float(v) > 0]
             return round(sum(vals) / len(vals), 2) if vals else 0.0
 
+        # v3.9.4 · ROE 同行均值（用上面补的逐行 ROE · 非 self）
+        _peer_roes = [_float(p.get("roe")) for p in tbl if not p.get("is_self") and _float(p.get("roe")) > 0]
+        _peer_roe_avg = round(sum(_peer_roes) / len(_peer_roes), 1) if _peer_roes else 0.0
+        _self_roe = _float(basic.get("roe")) if _float(basic.get("roe")) else None
+
         cmp = [
             {"name": "PE (越低越好)", "self": _float(basic.get("pe_ttm")), "peer": _avg("市盈率-动态")},
             {"name": "PB (越低越好)", "self": _float(basic.get("pb")),     "peer": _avg("市净率")},
+            {"name": "ROE (越高越好)", "self": _self_roe, "peer": _peer_roe_avg},
         ]
         return raw, tbl, cmp
 
