@@ -359,10 +359,14 @@ def extract_features(raw: dict, dims: dict) -> dict:
     # BVPS = equity / shares
     eq = _f(f.get("equity_yi"), 0)
     f["bvps"] = round(eq / f["shares_outstanding_yi"], 3) if f["shares_outstanding_yi"] > 0 else 0
-    # FCF latest (proxy from net_income × 0.8 if not present)
-    f["fcf_latest_yi"] = round(latest_ni * 0.8, 2) if latest_ni > 0 else 0
-    # v3.9.4 · fcf_positive 用真实 FCF（fcf_latest_yi > 0）判断，不再用 fcf_margin。
-    # fcf_margin 实际是 OCF/净利比，且现金流数据缺失时为 0 → 茅台被误判"现金流为负"。
+    # v3.9.4 · FCF：优先用真实经营现金流（fetch_financials 提供 operating_cash_flow_yi），
+    # 缺失时才回退到净利×0.8 代理。fcf_positive 基于真实 OCF 判断——
+    # 此前净利为正但现金流失血的公司会被误报 FCF 正（Codex P1）
+    _real_ocf = _f(fin.get("operating_cash_flow_yi"))
+    if _real_ocf:
+        f["fcf_latest_yi"] = round(_real_ocf, 2)
+    else:
+        f["fcf_latest_yi"] = round(latest_ni * 0.8, 2) if latest_ni > 0 else 0
     f["fcf_positive"] = f["fcf_latest_yi"] > 0
     # EBITDA (proxy: net_income / 0.6)
     f["ebitda_yi"] = round(latest_ni / 0.6, 2) if latest_ni > 0 else 0

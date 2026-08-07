@@ -320,17 +320,20 @@ def _viz_peers(raw: dict) -> str:
         viz += '<div style="font-family:Fira Code;font-size:10px;color:#64748b;margin-bottom:6px">📊 关键指标 vs 行业均值</div>'
         for m in metrics[:4]:
             name = m.get("name", "")
-            # v3.9.4 · self/peer 可能是 None（如 basic 无 ROE 字段）· 防御为 0，避免 abs(None) 崩
+            # v3.9.4 · self/peer 缺失（None/"—"）时跳过该指标（Codex P2-3）——
+            # 此前转成 0.0 渲染成"0"对比条，HK rank-only 指标会被误导为零值
             self_v = m.get("self")
             peer_v = m.get("peer")
+            if self_v in (None, "", "—") or peer_v in (None, "", "—"):
+                continue
             try:
-                self_v = float(self_v) if self_v not in (None, "", "—") else 0.0
+                self_v = float(self_v)
             except (TypeError, ValueError):
-                self_v = 0.0
+                continue
             try:
-                peer_v = float(peer_v) if peer_v not in (None, "", "—") else 0.0
+                peer_v = float(peer_v)
             except (TypeError, ValueError):
-                peer_v = 0.0
+                continue
             max_v = max(abs(self_v), abs(peer_v), 1)
             self_pct = abs(self_v) / max_v * 100
             peer_pct = abs(peer_v) / max_v * 100

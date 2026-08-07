@@ -245,10 +245,20 @@ def main(ticker: str) -> dict:
         # 用 stock_financial_analysis_indicator_em（不走 push2）拉它们的估值。
         if not peer_table:
             try:
-                from fetch_similar_stocks import INDUSTRY_PEERS
+                from fetch_similar_stocks import INDUSTRY_PEERS, INDUSTRY_ALIASES
+                # v3.9.4 · 别名匹配（Codex P2-1）：集成电路→半导体 / 工业金属→有色金属 / 乘用车→汽车
                 _peers = INDUSTRY_PEERS.get(industry, [])
+                if not _peers:
+                    _alias = INDUSTRY_ALIASES.get(industry)
+                    if _alias:
+                        _peers = INDUSTRY_PEERS.get(_alias, [])
                 if _peers:
                     import pandas as _pd
+                    # v3.9.4 · 若被分析股票不在同行列表里，先补 self 行（Codex P2-2）
+                    _self_code = ti.code
+                    _in_list = any(str(c) == _self_code for c, _ in _peers)
+                    if not _in_list:
+                        _peers = [(_self_code, basic.get("name") or ti.full)] + list(_peers)
                     _rows = []
                     for _pc, _pn in _peers[:6]:
                         _code = _pc + (".SH" if _pc.startswith("6") else ".SZ")
