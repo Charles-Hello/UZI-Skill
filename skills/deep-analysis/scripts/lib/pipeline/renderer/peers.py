@@ -43,13 +43,20 @@ class PeersRenderer(SectionRenderer):
         if not rows and not global_html:
             return self.render_gap(ctx, "同行数据为空")
 
+        # v3.9.3 · 拆出嵌套三引号 f-string · Python 3.9 不允许 f-string 表达式再含 f-string（3.12+ 才行）
+        rows_html = ""
+        if rows:
+            rows_html = (
+                '<table class="peers-table" style="width:100%;border-collapse:collapse">'
+                '<thead>'
+                '<tr><th>公司</th><th>市值</th><th>PE(TTM)</th><th>PB</th><th>ROE</th></tr>'
+                '</thead>'
+                '<tbody>' + "".join(rows) + '</tbody>'
+                '</table>'
+            )
+
         return f'''<section id="{self.section_id}">
   <h2>{self.section_title}</h2>
-  {f'''<table class="peers-table" style="width:100%;border-collapse:collapse">
-    <thead>
-      <tr><th>公司</th><th>市值</th><th>PE(TTM)</th><th>PB</th><th>ROE</th></tr>
-    </thead>
-    <tbody>{"".join(rows)}</tbody>
-  </table>''' if rows else ''}
+  {rows_html}
   {global_html}
 </section>'''

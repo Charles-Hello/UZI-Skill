@@ -2,6 +2,8 @@
 
 补全：原方案要求 PE/PB/PEG/PS/EV/EBITDA + DCF + 历史分位 + 行业中枢
 """
+from __future__ import annotations
+
 import json
 import sys
 from typing import Any
