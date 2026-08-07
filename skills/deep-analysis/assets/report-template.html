@@ -2763,7 +2763,7 @@ footer strong { color: var(--text-dim); }
       <div class="stock-code">{{TICKER}} · {{INDUSTRY}}</div>
       <div class="one-liner">{{ONE_LINER}}</div>
       <div class="price-row">
-        <div class="price">¥{{PRICE}}</div>
+        <div class="price">{{CURRENCY}}{{PRICE}}</div>
         <div class="change {{CHANGE_DIR}}">{{CHANGE_PCT}}</div>
       </div>
       <div class="metric-chips">
@@ -3031,10 +3031,10 @@ footer strong { color: var(--text-dim); }
     <div class="section-line"></div>
   </div>
   <div class="zones-grid">
-    <div class="zone"><div class="zone-label">VALUE 价值派</div><div class="zone-price">¥{{ZONE_VALUE_PRICE}}</div><div class="zone-rationale">{{ZONE_VALUE_RATIONALE}}</div></div>
-    <div class="zone"><div class="zone-label">GROWTH 成长派</div><div class="zone-price">¥{{ZONE_GROWTH_PRICE}}</div><div class="zone-rationale">{{ZONE_GROWTH_RATIONALE}}</div></div>
-    <div class="zone"><div class="zone-label">TECH 技术派</div><div class="zone-price">¥{{ZONE_TECH_PRICE}}</div><div class="zone-rationale">{{ZONE_TECH_RATIONALE}}</div></div>
-    <div class="zone"><div class="zone-label">YOUZI 游资派</div><div class="zone-price">¥{{ZONE_YOUZI_PRICE}}</div><div class="zone-rationale">{{ZONE_YOUZI_RATIONALE}}</div></div>
+    <div class="zone"><div class="zone-label">VALUE 价值派</div><div class="zone-price">{{CURRENCY}}{{ZONE_VALUE_PRICE}}</div><div class="zone-rationale">{{ZONE_VALUE_RATIONALE}}</div></div>
+    <div class="zone"><div class="zone-label">GROWTH 成长派</div><div class="zone-price">{{CURRENCY}}{{ZONE_GROWTH_PRICE}}</div><div class="zone-rationale">{{ZONE_GROWTH_RATIONALE}}</div></div>
+    <div class="zone"><div class="zone-label">TECH 技术派</div><div class="zone-price">{{CURRENCY}}{{ZONE_TECH_PRICE}}</div><div class="zone-rationale">{{ZONE_TECH_RATIONALE}}</div></div>
+    <div class="zone"><div class="zone-label">YOUZI 游资派</div><div class="zone-price">{{CURRENCY}}{{ZONE_YOUZI_PRICE}}</div><div class="zone-rationale">{{ZONE_YOUZI_RATIONALE}}</div></div>
   </div>
 
   <!-- v3.6.0 · 分享卡 + QR · 报告链接二维码 + 一句话总结 -->
@@ -3060,7 +3060,7 @@ footer strong { color: var(--text-dim); }
     <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:380px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto">
       <!-- 标题 -->
       <div style="font-size:22px;font-weight:900;color:#111">{{NAME}}</div>
-      <div style="font-size:14px;color:#6b7280;margin:4px 0 12px">{{TICKER}} · ¥{{PRICE}}</div>
+      <div style="font-size:14px;color:#6b7280;margin:4px 0 12px">{{TICKER}} · {{CURRENCY}}{{PRICE}}</div>
 
       <!-- 评分 -->
       <div style="background:linear-gradient(135deg,#fef3c7,#fff7ed);border:2px solid #f59e0b;border-radius:16px;padding:16px;margin-bottom:16px">
@@ -3141,7 +3141,7 @@ footer strong { color: var(--text-dim); }
   <h1 class="sc-name">{{NAME}}</h1>
   <div class="sc-code-row">
     <div class="sc-code">{{TICKER}}</div>
-    <div class="sc-price">¥{{PRICE}}</div>
+    <div class="sc-price">{{CURRENCY}}{{PRICE}}</div>
     <div class="sc-change {{CHANGE_DIR}}">{{CHANGE_PCT}}</div>
   </div>
 
