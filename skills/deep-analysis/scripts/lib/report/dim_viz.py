@@ -468,8 +468,15 @@ def _viz_governance(raw: dict) -> str:
 
     # Qualitative search results
     qual = raw.get("qualitative_search") or []
-    related_tx = "已查询" if qual else "—"
-    violations = "未发现" if qual else "—"
+    # v3.9.4 · 仅"搜过查询词"不等于"未发现违规"——qual 存的是搜索词而非结果，改为中性表述
+    hits = raw.get("violation_hits")
+    if isinstance(hits, list) and hits:
+        violations = f"{len(hits)} 条待核"
+    elif hits == 0 or hits == []:
+        violations = "未发现"
+    else:
+        violations = "暂无公开违规记录"  # v3.9.4 · 数据缺省时中性表述，非"未发现"断言
+    no_violations = violations == "未发现"
 
     def _badge(label, val, positive):
         color = COLOR_BULL if positive else COLOR_BEAR if positive is False else COLOR_GOLD
@@ -480,7 +487,6 @@ def _viz_governance(raw: dict) -> str:
 </div>'''
     low_pledge = isinstance(pledge_raw, list) and len(pledge_raw) > 0 and (isinstance(pledge_raw[0], dict) and pledge_raw[0].get("质押比例", 100) < 20)
     insider_positive = "增持" in str(insider) or "买入" in str(insider)
-    no_violations = "未发现" in str(violations) or violations == "—"
     rows = _badge("实控人质押", pledge, low_pledge)
     rows += _badge("近12月增减持", insider, insider_positive)
     rows += _badge("关联交易/违规", violations, no_violations)
@@ -490,16 +496,17 @@ def _viz_governance(raw: dict) -> str:
 def _viz_capital_flow(raw: dict) -> str:
     """4 mini sparklines + 机构持仓变化 + 解禁时间表"""
     def _mini(label, values, summary, color):
+        summary = _safe(summary, "数据暂缺")  # v3.9.4 · None → 数据暂缺（不再显示 "None"）
         if not values or len(values) < 2:
             return f'''<div style="padding:10px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px">
   <div style="font-family:Fira Code;font-size:9px;color:#64748b">{label}</div>
-  <div style="font-family:Fira Code;font-size:12px;font-weight:700;color:#0f172a;margin-top:2px">{summary}</div>
+  <div style="font-family:Fira Code;font-size:12px;font-weight:700;color:#64748b;margin-top:2px">{summary}</div>
 </div>'''
         spark = svg_sparkline(values, width=120, height=34, color=color)
         return f'''<div style="padding:10px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
     <span style="font-family:Fira Code;font-size:9px;color:#64748b">{label}</span>
-    <strong style="font-family:Fira Code;font-size:10px;color:#0f172a">{summary}</strong>
+    <strong style="font-family:Fira Code;font-size:10px;color:#0f172a">{_safe(summary, "数据暂缺")}</strong>
   </div>
   {spark}
 </div>'''
@@ -546,15 +553,16 @@ def _viz_capital_flow(raw: dict) -> str:
 
 
 def _viz_policy(raw: dict) -> str:
+    # v3.9.4 · None → "—"（数据源 null 时走"无数据"分支，不再显示 "None"）
     items = [
-        ("方向", raw.get("policy_dir", "—"), True),
-        ("补贴", raw.get("subsidy", "—"), True),
-        ("监管", raw.get("monitoring", "—"), None),
-        ("反垄断", raw.get("anti_trust", "—"), None),
+        ("方向", _safe(raw.get("policy_dir")), True),
+        ("补贴", _safe(raw.get("subsidy")), True),
+        ("监管", _safe(raw.get("monitoring")), None),
+        ("反垄断", _safe(raw.get("anti_trust")), None),
     ]
     cells = ""
     for label, val, positive in items:
-        if val in ("—", "不适用", "无"):
+        if val in ("—", "不适用", "无", "数据暂缺"):
             cells += f'<div style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px"><div style="font-family:Fira Code;font-size:9px;color:#94a3b8">{label}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">{val}</div></div>'
         else:
             color = COLOR_BULL if positive else COLOR_GOLD
