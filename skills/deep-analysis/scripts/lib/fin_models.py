@@ -144,8 +144,15 @@ def compute_dcf(features: dict, assumptions: dict | None = None) -> dict:
 
     # Enterprise value → equity value
     enterprise_value = round(pv_explicit + tv_pv, 3)
-    net_debt = _num(features.get("total_debt_yi")) - _num(features.get("cash_yi"))
+    # v3.9.4 · 净债桥缺失检测：total_debt/cash 都无真实数据时显式标注，
+    # 此前静默当 0 → 高杠杆公司股权价值被高估为整个 EV
+    _td = _num(features.get("total_debt_yi"))
+    _cash = _num(features.get("cash_yi"))
+    _has_debt_data = "total_debt_yi" in features and features.get("total_debt_yi") not in (None, 0) \
+        or "cash_yi" in features and features.get("cash_yi") not in (None, 0)
+    net_debt = _td - _cash
     equity_value = round(enterprise_value - net_debt, 3)
+    _net_debt_note = "" if _has_debt_data else "（净债桥缺失 · EV≈股权价值 · 高杠杆公司会高估）"
 
     shares_yi = _num(features.get("shares_outstanding_yi"))
     if shares_yi <= 0:
@@ -182,6 +189,7 @@ def compute_dcf(features: dict, assumptions: dict | None = None) -> dict:
         "enterprise_value_yi": enterprise_value,
         "net_debt_yi": round(net_debt, 3),
         "equity_value_yi": equity_value,
+        "net_debt_bridge_note": _net_debt_note,
         "shares_yi": round(shares_yi, 3),
         "intrinsic_per_share": per_share,
         "current_price": cur_price,
@@ -195,7 +203,7 @@ def compute_dcf(features: dict, assumptions: dict | None = None) -> dict:
             f"Step 3 · 两段增长 {a['stage1_growth']*100:.0f}% ({a['stage1_years']}年) → {a['stage2_growth']*100:.0f}% ({a['stage2_years']}年)",
             f"Step 4 · 显式期 PV 合计 {pv_explicit:.1f} 亿",
             f"Step 5 · 终值 @ g={a['terminal_g']*100:.1f}% → PV={tv_pv:.1f} 亿（占 EV 的 {round(tv_pv/enterprise_value*100, 0) if enterprise_value>0 else 0:.0f}%）",
-            f"Step 6 · EV {enterprise_value:.1f} 亿 − 净债 {net_debt:.1f} 亿 = 股权价值 {equity_value:.1f} 亿",
+            f"Step 6 · EV {enterprise_value:.1f} 亿 − 净债 {net_debt:.1f} 亿 = 股权价值 {equity_value:.1f} 亿{_net_debt_note}",
             f"Step 7 · 每股内在价值 ¥{per_share:.2f}（当前价 ¥{cur_price:.2f}，安全边际 {safety_margin:+.1f}%）",
         ],
     }
