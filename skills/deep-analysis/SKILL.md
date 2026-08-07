@@ -563,7 +563,7 @@ python -c "from run_real_test import stage2; stage2('<ticker>')"
 Stage 2 读取你更新后的 panel.json + agent_analysis.json，合并生成 HTML 报告。
 如果没有 agent_analysis.json，退化为纯脚本模式（会打印警告）。
 
-### 快速模式（跳过 agent 介入）
+### 快速模式（跳过 agent 介入 · 仅 lite/medium）
 
 如果用户说"快速分析"或时间紧：
 ```bash
@@ -571,6 +571,8 @@ cd <repo_root>
 python run.py <股票> --no-browser
 ```
 这会 stage1 + stage2 一把跑完，不做 agent 分析。速度快但评委判断全是规则引擎的机械输出。
+
+> ⚠️ **v3.9.4 明确**：此模式只适用于 lite/medium 档。**`--depth deep` 不属于快速模式**——deep 档必须由你介入 role-play 66 评委并写 `agent_analysis.json`（见上方 HARD-GATE-PERSONA-ROLEPLAY）。看到 deep 档时不要直接 `run.py --depth deep` 一把梭。
 
 ---
 
