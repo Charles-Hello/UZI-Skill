@@ -368,6 +368,7 @@ def extract_features(raw: dict, dims: dict) -> dict:
     health = fin.get("financial_health") or {}
     f["total_debt_yi"] = _f(health.get("total_debt"), 0) if isinstance(health, dict) else 0
     f["cash_yi"] = _f(health.get("cash"), 0) if isinstance(health, dict) else 0
+    f["equity_yi"] = _f(health.get("equity"), 0) if isinstance(health, dict) else 0
     # Gross margin (%)
     f["gross_margin"] = _f(fin.get("gross_margin"), default=f.get("net_margin", 10) + 18)
     # PS ratio

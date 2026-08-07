@@ -136,6 +136,30 @@ def _fetch_a_share(ti) -> dict:
             if health:
                 out["financial_health"] = health
 
+            # v3.9.4 · 资产负债表 → total_debt/cash/equity（此前恒缺 → DCF 净债桥=0）
+            # 接口参考 stock_web._fetch_quarterly：ak.stock_balance_sheet_by_report_em
+            # MONETARYFUNDS(货币资金)/TOTAL_LIABILITIES(总负债)/TOTAL_PARENT_EQUITY(归母净资产)
+            try:
+                df_bs = ak.stock_balance_sheet_by_report_em(
+                    symbol=f"{'SH' if ti.full.endswith('SH') else 'SZ'}{code}"
+                )
+                if df_bs is not None and not df_bs.empty:
+                    _bs_last = df_bs.iloc[-1]
+                    _bs_add = {}
+                    for _src, _dst in (
+                        ("MONETARYFUNDS", "cash"),
+                        ("TOTAL_LIABILITIES", "total_debt"),
+                        ("TOTAL_PARENT_EQUITY", "equity"),
+                    ):
+                        if _src in df_bs.columns:
+                            _v = _to_float(_bs_last.get(_src))
+                            if _v:
+                                _bs_add[_dst] = round(_v / 1e8, 2)
+                    if _bs_add:
+                        out.setdefault("financial_health", {}).update(_bs_add)
+            except Exception as e:
+                out["_balance_sheet_error"] = str(e)[:80]
+
             # Net margin / ROE 汇总 summary strings
             if "加权净资产收益率(%)" in df_ind.columns:
                 out["roe"] = f"{_to_float(last['加权净资产收益率(%)']):.1f}%"
