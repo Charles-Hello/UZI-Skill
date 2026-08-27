@@ -24,6 +24,7 @@ def test_a_share_financial_ratios_use_annual_period(monkeypatch):
         "总资产净利率(%)": [12.0, 3.0],
         "销售净利率(%)": [20.0, 21.0],
         "总资产周转率(次)": [0.8, 0.2],
+        "主营业务收入增长率(%)": [-5.4, 35.33],
     })
     empty = pd.DataFrame()
     monkeypatch.setattr(ff.ak, "stock_financial_abstract", lambda **_kwargs: empty)
@@ -42,6 +43,47 @@ def test_a_share_financial_ratios_use_annual_period(monkeypatch):
     assert out["financial_health"]["debt_ratio"] == 55.0
     assert out["financial_health"]["roic"] == 12.0
     assert out["dupont"]["net_margin_pct"] == 20.0
+    assert out["revenue_growth"] == "+35.3%"
+    assert out["revenue_growth_yoy"] == 35.33
+    assert out["revenue_growth_period"] == "2026-03-31"
+    assert out["revenue_growth_basis"] == "reported_yoy"
+    assert "主营业务收入增长率" in out["revenue_growth_source"]
+
+
+def test_stock_features_prefer_reported_revenue_yoy_over_annual_history():
+    from lib.stock_features import extract_features
+
+    financials = {
+        "revenue_history": [971.46, 919.14],
+        "revenue_growth_yoy": 35.33,
+        "revenue_growth_period": "2026-03-31",
+        "revenue_growth_basis": "reported_yoy",
+        "revenue_growth_source": "akshare:test",
+    }
+    dims = _minimal_dims(financials)
+
+    features = extract_features({"ticker": "600015.SH", "dimensions": dims}, dims)
+
+    assert features["revenue_growth_latest"] == 35.33
+    assert features["revenue_growth_period"] == "2026-03-31"
+    assert features["revenue_growth_basis"] == "reported_yoy"
+    assert features["revenue_growth_source"] == "akshare:test"
+
+
+def test_reported_revenue_growth_skips_non_finite_values():
+    import fetch_financials as ff
+
+    indicator = pd.DataFrame({
+        "日期": ["2025-12-31", "2026-03-31"],
+        "主营业务收入增长率(%)": [12.5, float("nan")],
+    })
+
+    value, period, column = ff._latest_reported_revenue_growth(indicator, "日期")
+
+    assert value == 12.5
+    assert period == "2025-12-31"
+    assert column == "主营业务收入增长率(%)"
+    assert ff._to_float_or_none(float("inf")) is None
 
 
 def test_all_zero_financial_histories_are_dropped():
