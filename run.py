@@ -451,6 +451,8 @@ def main():
                         help="绕过中文名纠错直接使用指定代码 (如 --force-name 000582.SZ)")
     parser.add_argument("--no-resume", action="store_true",
                         help="v2.6 · 强制重抓所有 fetcher（默认 resume：复用 .cache/{ticker}/raw_data.json 已有维度）")
+    parser.add_argument("--from-modeling", action="store_true",
+                        help="从已有 raw_data.json 直接恢复机构建模、评分和报告生成，不重新采集数据")
     parser.add_argument("--enable-xueqiu-login", action="store_true",
                         help="v2.7.1 · 启用 XueQiu Playwright 登录态抓取实盘比赛持仓（首次需 `python -m lib.xueqiu_browser login`）")
     parser.add_argument("--depth", choices=["lite", "medium", "deep"], default=None,
@@ -595,10 +597,25 @@ def main():
     #   - 不设 env    → 走 pipeline.run_pipeline（collect + score + synthesize 全新）
     #   - pipeline 异常 → 自动回退 legacy · 绝不中断业务
     # 原 UZI_PIPELINE=1 仍兼容接受（无操作 · 同默认）
+    from run_real_test import (
+        main as run_analysis,
+        stage1 as _stage1,
+        stage1_modeling as _stage1_modeling,
+        stage2 as _stage2,
+    )
+
     _pipeline_succeeded = False
+    _modeling_succeeded = False
     _force_legacy = os.environ.get("UZI_LEGACY") == "1"
-    _pipeline_requested = not _force_legacy
-    if _pipeline_requested:
+    _pipeline_requested = not _force_legacy and not args.from_modeling
+    if args.from_modeling:
+        modeling_result = _stage1_modeling(args.ticker)
+        resolved_ticker = modeling_result["ticker"]
+        report_path = _stage2(resolved_ticker)
+        args.ticker = resolved_ticker
+        _set_direct_report_path(args, report_path)
+        _modeling_succeeded = True
+    elif _pipeline_requested:
         try:
             from lib.pipeline.run import run_pipeline
             print("🚀 [run.py] v3.0.0 pipeline · 默认路径")
@@ -610,11 +627,11 @@ def main():
             traceback.print_exc()
             _pipeline_succeeded = False
 
-    from run_real_test import main as run_analysis, stage1 as _stage1, stage2 as _stage2
-
     # v2.3 · 先过 stage1，捕获中文名解析失败场景，不静默跑出空报告
     from lib.market_router import is_chinese_name
-    if _pipeline_succeeded:
+    if _modeling_succeeded:
+        print("   → 从 raw_data.json 恢复建模完成 · skip 数据采集")
+    elif _pipeline_succeeded:
         # pipeline 成功 · 报告已生成 · 跳过 legacy · 直接 fallthrough 到 report dir 查找
         print("   → 走 pipeline · skip legacy stage1/stage2")
     elif is_chinese_name(args.ticker) and not args.force_name:

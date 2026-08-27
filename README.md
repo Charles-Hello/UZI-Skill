@@ -235,6 +235,7 @@ python run.py --versus 茅台 五粮液 002594.SZ         # 2-4 只票横向对�
 python run.py --portfolio holdings.csv             # CSV 组合 · 加权评分 + 健康度
 python run.py 600519.SH --output-dir /tmp/out      # SaaS 集成 · index.html + meta.json
 python run.py 600519.SH --remote                   # 公网链接 · 缺 cloudflared 时默认不改系统
+python run.py 601238.SH --from-modeling            # 采集后建模崩溃 · 从 raw_data.json 秒级续跑
 ```
 
 ---
@@ -645,8 +646,10 @@ cp .env.example .env
 python run.py 贵州茅台
 ```
 
-**双端都不通**：agent 应保留 `_data_gaps.json` / `_resolve_error.json`，
-等网络恢复后直接跑 `stage2()` 可以复用已采集数据，不用从头来过。
+**双端都不通**：agent 应保留 `_data_gaps.json` / `_resolve_error.json`。如果数据已采集、
+但机构建模或评分阶段中断，使用 `python run.py <ticker> --from-modeling` 从
+`raw_data.json` 继续；如果 `dimensions.json` 和 `panel.json` 也已生成，可直接调用
+`stage2()`，都不需要从头抓取。
 
 详见 [AGENTS.md · 网络受限环境](AGENTS.md) 的场景 A/B/C 速查。
 
