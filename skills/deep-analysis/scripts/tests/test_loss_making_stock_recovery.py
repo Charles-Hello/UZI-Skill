@@ -132,6 +132,103 @@ def test_failed_dcf_placeholder_escapes_verdict_html():
     assert "&lt;script&gt;" in html
 
 
+def test_partial_institutional_numeric_data_does_not_crash_renderers():
+    from lib.report.institutional import (
+        _render_catalyst_calendar,
+        _render_comps_block,
+        _render_competitive_analysis,
+        _render_dcf_block,
+        _render_ic_memo,
+        _render_initiating_coverage,
+        _render_lbo_block,
+    )
+
+    dcf_html = _render_dcf_block({
+        "dcf": {
+            "intrinsic_per_share": 10,
+            "current_price": 5,
+            "safety_margin_pct": 100,
+            "sensitivity_table": {
+                "wacc_axis": ["10%"],
+                "g_axis": ["2%"],
+                "values_per_share": [[None]],
+            },
+        }
+    })
+    lbo_html = _render_lbo_block({
+        "lbo": {
+            "irr_pct": None,
+            "moic": None,
+            "ebitda_path": [10, None, 12],
+            "debt_schedule": [8, None, 4],
+        }
+    })
+    memo_html = _render_ic_memo({
+        "ic_memo": {
+            "sections": {
+                "I_exec_summary": {"headline": None},
+                "VII_returns_scenarios": [{
+                    "return_pct": None,
+                    "probability_pct": None,
+                    "price_target": None,
+                }],
+            }
+        }
+    })
+    competitive_html = _render_competitive_analysis({
+        "competitive_analysis": {
+            "porter_five_forces": {
+                "new_entrants_threat": {"score": None},
+            },
+            "bcg_position": {
+                "market_share_pct": None,
+                "market_growth_pct": None,
+            },
+        }
+    })
+    comps_html = _render_comps_block({
+        "comps": {
+            "peer_stats": {"pe": {"min": 10, "median": 20, "max": 30}},
+            "target_percentile": {"pe": None},
+        }
+    })
+    coverage_html = _render_initiating_coverage({
+        "initiating_coverage": {"headline": {"rating": None}}
+    })
+    catalyst_html = _render_catalyst_calendar({
+        "catalyst_calendar": {"events": [{"date": None, "event": "财报"}]}
+    })
+
+    assert "—" in dcf_html
+    assert "退出 IRR" in lbo_html
+    assert "三情景回报分析" in memo_html
+    assert "Porter 5 Forces" in competitive_html
+    assert "50%" in comps_html
+    assert "RATING" in coverage_html
+    assert "财报" in catalyst_html
+
+
+def test_partial_features_do_not_crash_standalone_research_methods():
+    from lib.deep_analysis_methods import build_value_creation_plan
+    from lib.research_workflow import build_thesis_tracker
+
+    raw = {"dimensions": {}}
+    features = {
+        "rev_growth_3y": None,
+        "roe_last": None,
+        "pe": None,
+        "gross_margin": None,
+        "revenue_latest_yi": None,
+        "ebitda_yi": None,
+    }
+
+    tracker = build_thesis_tracker(features, raw)
+    plan = build_value_creation_plan(features, raw)
+
+    assert tracker["pillars_total"] == 5
+    assert plan["method"] == "Value Creation Plan (EBITDA Bridge)"
+
+
 def test_northbound_fetch_uses_one_latest_page(monkeypatch):
     from lib import data_sources as ds
     from lib.market_router import parse_ticker
