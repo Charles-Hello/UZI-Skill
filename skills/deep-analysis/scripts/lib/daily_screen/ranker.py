@@ -1,9 +1,14 @@
 """Hard gates, evidence confidence and actionability decisions."""
 from __future__ import annotations
 
+from datetime import datetime
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
 from .models import ScreenCandidate, StockSnapshot
 from .personas import evaluate_f_personas, evaluate_serenity
-from .events import filter_evidence
+from .events import filter_evidence, evidence_time
+from .execution import execution_gaps
 
 
 def preselect(stocks: list[StockSnapshot], limit: int = 40) -> list[StockSnapshot]:
@@ -16,9 +21,10 @@ def preselect(stocks: list[StockSnapshot], limit: int = 40) -> list[StockSnapsho
     return sorted(stocks, key=score, reverse=True)[:limit]
 
 
-def build_candidate(stock: StockSnapshot, theme: dict, evidence: list[dict], gaps: list[str]) -> ScreenCandidate:
+def build_candidate(stock: StockSnapshot, theme: dict, evidence: list[dict], gaps: list[str], *, evaluated_at: datetime | None = None) -> ScreenCandidate:
     evidence, time_gaps = filter_evidence(evidence, stock.observed_at)
     gaps = list(gaps) + time_gaps
+    evaluated_at = evaluated_at or datetime.now(ZoneInfo("Asia/Shanghai"))
     verdicts = evaluate_f_personas(stock, theme, evidence)
     serenity = evaluate_serenity(stock, theme, evidence)
     active_f = [item for item in verdicts if item.eligible]
@@ -39,20 +45,38 @@ def build_candidate(stock: StockSnapshot, theme: dict, evidence: list[dict], gap
     confidence = round(min(100, data_quality + theme_score + event_score + tape_score + role_score), 1)
 
     risk_flags = []
-    # The spot provider supplies no order book, VWAP or executable-price proof.
-    # A high rule score must not substitute for these missing observations.
-    gaps.append("intraday_execution_unverified")
+    blocking = execution_gaps(stock, evaluated_at)
     if not theme:
-        gaps.append("industry_context_missing")
+        blocking.append("industry_context_missing")
+    if (stock.extra.get("industry_coverage", 0) < 0.95
+            or not stock.extra.get("industry_source", {}).get("source")):
+        blocking.append("industry_coverage_unverified")
+    theme_time = evidence_time(theme.get("observed_at"))
+    if theme_time is None or not 0 <= (evaluated_at - theme_time).total_seconds() <= 300:
+        blocking.append("industry_snapshot_stale")
     if stock.change_pct >= 8:
         risk_flags.append("短时涨幅偏大，追价风险高")
     if bearish and len(bearish) > len(bullish):
         risk_flags.append("F 组反对人数高于看多人数")
-    if not any(item.get("kind") == "event" for item in evidence):
-        gaps.append("event_evidence_missing")
+    eligible_news = []
+    for item in evidence:
+        published = evidence_time(item.get("published_at"))
+        try:
+            url = urlparse(str(item.get("url") or ""))
+        except ValueError:
+            continue
+        if (item.get("kind") == "event" and item.get("company_specific") is True
+                and item.get("source") and url.scheme in ("https", "http") and url.netloc
+                and published is not None and 0 <= (evaluated_at - published).total_seconds() <= 72 * 3600):
+            eligible_news.append(item)
+    if not eligible_news:
+        blocking.append("event_evidence_missing")
+    if "snapshot_only" in gaps:
+        blocking.append("snapshot_only")
+    gaps.extend(blocking)
 
     leader = (theme.get("leader_rank") or 999) <= 2
-    if gaps or confidence < 70:
+    if blocking or confidence < 70:
         action = "watch_only"
     elif stock.change_pct >= 7:
         action = "wait_pullback"

@@ -17,6 +17,16 @@ from .renderer import render_report
 from .themes import build_theme_context
 from .tracker import append_signals
 from .universe import apply_hard_filters, fetch_market_universe
+from .sources import enrich_intraday, fetch_industries
+
+
+def _enrich_candidate(stock: StockSnapshot):
+    evidence, gaps = enrich_stock(stock)
+    try:
+        enrich_intraday(stock)
+    except Exception as exc:
+        gaps.append(f"intraday:{type(exc).__name__}")
+    return evidence, gaps
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -90,14 +100,14 @@ def run_daily_screen(
             market_errors[market] = f"{type(exc).__name__}: {str(exc)[:160]}"
             universe_stats[market] = {"input": 0, "liquid": 0, "error": market_errors[market]}
 
-    themes = build_theme_context(theme_universe)
+    industry_health = fetch_industries(theme_universe) if enrich and frozen_stocks is None else {}
     shortlisted = preselect(all_stocks, limit=40)
     enrichments: dict[str, tuple[list[dict], list[str]]] = {
         stock.code: ([], ["snapshot_only"]) for stock in shortlisted
     }
     if enrich and shortlisted:
         with ThreadPoolExecutor(max_workers=6) as pool:
-            futures = {pool.submit(enrich_stock, stock): stock.code for stock in shortlisted}
+            futures = {pool.submit(_enrich_candidate, stock): stock.code for stock in shortlisted}
             for future in as_completed(futures):
                 code = futures[future]
                 try:
@@ -105,14 +115,21 @@ def run_daily_screen(
                 except Exception as exc:
                     enrichments[code] = ([], [f"enrichment:{type(exc).__name__}"])
 
+    # Evaluate freshness once, after all source work; slow peers cannot leave a
+    # previously accepted quote marked executable at publication time.
+    generated_at = datetime.now(tz)
+    shortlisted, refreshed_filter_stats = apply_hard_filters(shortlisted, min_turnover_local)
+    themes = build_theme_context(theme_universe)
+    for market in as_of_by_market:
+        stamps = [evidence_time(stock.observed_at) for stock in theme_universe if stock.market == market]
+        as_of_by_market[market] = max(stamp for stamp in stamps if stamp is not None).isoformat(timespec="seconds")
     candidates = []
     for stock in shortlisted:
         evidence, gaps = enrichments[stock.code]
-        candidates.append(build_candidate(stock, themes.get(stock.code, {}), evidence, gaps))
+        candidates.append(build_candidate(stock, themes.get(stock.code, {}), evidence, gaps, evaluated_at=generated_at))
     picks, rejected = rank_candidates(candidates, top_n=top_n)
     action_summary = Counter(item.action for item in picks)
 
-    generated_at = datetime.now(tz)
     report_id = f"{generated_at:%Y%m%d}-{mode}-ah-{generated_at:%H%M%S%f}"
     scripts_root = Path(__file__).resolve().parents[2]
     output_root = output_root or scripts_root / "reports" / "screens" / generated_at.strftime("%Y-%m-%d") / report_id
@@ -140,6 +157,9 @@ def run_daily_screen(
             "markets_available": [market for market in markets if market not in market_errors],
             "enrichment_enabled": enrich,
             "shortlisted": len(shortlisted),
+            "removed_after_quote_refresh": refreshed_filter_stats["removed_low_turnover"],
+            "industry_sources": industry_health,
+            "intraday_available": sum(bool(stock.extra.get("intraday", {}).get("bars")) for stock in shortlisted),
         },
         "performance_contract": {
             "entry": "first_executable_price_after_publish",

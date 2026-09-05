@@ -63,14 +63,24 @@ def enrich_stock(stock: StockSnapshot) -> tuple[list[dict], list[str]]:
         payload = fetch_events.main(stock.code)
         data = _wrapped_data(payload)
         source = payload.get("source", "fetch_events") if isinstance(payload, dict) else "fetch_events"
-        events = data.get("event_timeline") or data.get("recent_news") or []
-        for item in events[:8]:
+        events = list(data.get("recent_news") or []) + list(data.get("recent_notices") or [])
+        if not events:
+            events = data.get("event_timeline") or []
+        seen = set()
+        for item in events[:40]:
             if isinstance(item, dict):
                 title = item.get("event") or item.get("title") or item.get("headline") or item.get("summary")
                 published = item.get("date") or item.get("published_at") or item.get("time")
+                item_source = item.get("source") or item.get("type") or source
+                url = item.get("url") or (item_source if str(item_source).startswith("https://") else "")
+                notice = "cninfo" in str(item.get("type", "")) or str(item_source) == "hkexnews"
+                relevant = notice or stock.code.split(".")[0] in str(title) or stock.name in str(title)
             else:
                 title, published = str(item), None
-            if title:
+                item_source, url, relevant = source, "", False
+            key = (str(title), str(published))
+            if title and key not in seen:
+                seen.add(key)
                 evidence.append({
                     "kind": "event",
                     "grade": "C",
@@ -78,7 +88,9 @@ def enrich_stock(stock: StockSnapshot) -> tuple[list[dict], list[str]]:
                     "title": str(title),
                     "published_at": published,
                     "observed_at": stock.observed_at,
-                    "source": source,
+                    "source": item_source,
+                    "url": url,
+                    "company_specific": relevant,
                 })
     except Exception as exc:
         gaps.append(f"events:{type(exc).__name__}")

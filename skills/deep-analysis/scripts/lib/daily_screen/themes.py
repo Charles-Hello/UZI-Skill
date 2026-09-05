@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .models import StockSnapshot
+from .events import evidence_time
 
 
 def build_theme_context(stocks: list[StockSnapshot]) -> dict[str, dict]:
@@ -24,6 +25,8 @@ def build_theme_context(stocks: list[StockSnapshot]) -> dict[str, dict]:
             "breadth_pct": sum(1 for item in members if item.change_pct > 0) / len(members) * 100,
             "amount": sum(item.amount for item in members),
             "members": sorted(members, key=lambda item: (item.change_pct, item.amount), reverse=True),
+            "observed_at": min((evidence_time(item.observed_at) for item in members
+                                if evidence_time(item.observed_at) is not None), default=None),
         })
     rows.sort(key=lambda row: (row["avg_change_pct"], row["breadth_pct"], row["amount"]), reverse=True)
     context: dict[str, dict] = {}
@@ -38,5 +41,7 @@ def build_theme_context(stocks: list[StockSnapshot]) -> dict[str, dict]:
                 "breadth_pct": round(row["breadth_pct"], 1),
                 "theme_avg_change_pct": round(row["avg_change_pct"], 2),
                 "theme_amount": row["amount"],
+                "observed_at": row["observed_at"].isoformat() if row["observed_at"] is not None else None,
+                "sample_size": len(row["members"]),
             }
     return context
